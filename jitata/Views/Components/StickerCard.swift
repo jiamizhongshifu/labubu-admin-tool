@@ -175,8 +175,8 @@ private func formatDate(_ date: Date) -> String {
     }
     
     // 其他情况显示短日期
-    formatter.dateStyle = .short
-    return formatter.string(from: date)
+        formatter.dateStyle = .short
+        return formatter.string(from: date)
 }
 
 #Preview {

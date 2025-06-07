@@ -103,7 +103,7 @@ struct CollectionView: View {
                 }
             }
             .navigationTitle("")
-            .navigationBarHidden(true)
+            .navigationBarHidden(false)
         }
         .onAppear {
             // 初始化默认分类

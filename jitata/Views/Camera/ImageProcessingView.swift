@@ -9,7 +9,7 @@ import SwiftUI
 
 struct ImageProcessingView: View {
     let originalImage: UIImage
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     
     @StateObject private var visionService = VisionService.shared
@@ -22,6 +22,7 @@ struct ImageProcessingView: View {
     @State private var selectedStyle: ImageProcessor.StickerStyle = .withShadow
     @State private var showingAlert = false
     @State private var alertMessage = ""
+    @State private var isSaving = false
     
     let categories = ["手办", "盲盒", "积木", "卡牌", "其他"]
     
@@ -47,16 +48,23 @@ struct ImageProcessingView: View {
                             // 保存按钮
                             Button(action: { showingNameInput = true }) {
                                 HStack {
-                                    Image(systemName: "plus.circle.fill")
-                                    Text("添加到图鉴")
+                                    if isSaving {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(0.8)
+                                    } else {
+                                        Image(systemName: "plus.circle.fill")
+                                    }
+                                    Text(isSaving ? "保存中..." : "添加到图鉴")
                                 }
                                 .font(.headline)
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(Color.blue)
+                                .background(isSaving ? Color.gray : Color.blue)
                                 .cornerRadius(12)
                             }
+                            .disabled(isSaving)
                         }
                         
                         // 重新处理按钮
@@ -65,7 +73,7 @@ struct ImageProcessingView: View {
                                 processImage()
                             } else {
                                 // 重新拍摄，回到拍摄页面
-                                presentationMode.wrappedValue.dismiss()
+                                dismiss()
                             }
                         }) {
                             HStack {
@@ -79,7 +87,7 @@ struct ImageProcessingView: View {
                             .background(Color.blue.opacity(0.1))
                             .cornerRadius(12)
                         }
-                        .disabled(isProcessing)
+                        .disabled(isProcessing || isSaving)
                     }
                     .padding(.horizontal)
                 }
@@ -89,8 +97,9 @@ struct ImageProcessingView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("取消") {
-                        presentationMode.wrappedValue.dismiss()
+                        dismiss()
                     }
+                    .disabled(isSaving)
                 }
             }
         }
@@ -110,7 +119,12 @@ struct ImageProcessingView: View {
             }
         }
         .alert("提示", isPresented: $showingAlert) {
-            Button("确定", role: .cancel) { }
+            Button("确定", role: .cancel) { 
+                if alertMessage.contains("保存成功") {
+                    // 保存成功后返回主页
+                    dismiss()
+                }
+            }
         } message: {
             Text(alertMessage)
         }
@@ -122,14 +136,10 @@ struct ImageProcessingView: View {
         Task {
             do {
                 let backgroundRemovedImage = try await visionService.removeBackground(from: originalImage)
-                // 直接应用默认的贴纸效果：白色描边和投影
-                let styledImage = ImageProcessor.shared.applyStickerEffect(
-                    to: backgroundRemovedImage,
-                    style: .withShadow
-                )
+                // 预览阶段不添加任何滤镜效果，直接显示抠图结果
                 
                 await MainActor.run {
-                    self.processedImage = styledImage
+                    self.processedImage = backgroundRemovedImage
                     self.isProcessing = false
                 }
             } catch {
@@ -145,6 +155,8 @@ struct ImageProcessingView: View {
     private func saveSticker(name: String, category: String, notes: String) {
         guard let processedImage = processedImage else { return }
         
+        isSaving = true
+        
         let sticker = ToySticker(
             name: name,
             categoryName: category,
@@ -155,7 +167,13 @@ struct ImageProcessingView: View {
         
         // 使用DataManager统一管理数据
         DataManager.shared.addToySticker(sticker)
-        presentationMode.wrappedValue.dismiss()
+        
+        // 模拟保存过程
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.isSaving = false
+            self.alertMessage = "潮玩贴纸保存成功！已添加到你的图鉴中。"
+            self.showingAlert = true
+        }
     }
 }
 
@@ -185,20 +203,13 @@ struct ImageComparisonView: View {
     let processedImage: UIImage?
     
     var body: some View {
-        HStack(spacing: 16) {
+        VStack(spacing: 20) {
             // 原图
             VStack(spacing: 8) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.systemGray6))
-                        .frame(height: 200)
-                    
-                    Image(uiImage: originalImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(height: 180)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
+                Image(uiImage: originalImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxHeight: 250)
                 
                 Text("原图")
                     .font(.caption)
@@ -206,33 +217,40 @@ struct ImageComparisonView: View {
             }
             
             // 箭头
-            Image(systemName: "arrow.right")
+            Image(systemName: "arrow.down")
                 .font(.title2)
                 .foregroundColor(.blue)
             
-            // 处理后
+            // 处理后 - 使用ZStack确保黑色背景不被任何父视图覆盖
             VStack(spacing: 8) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.systemGray6))
-                        .frame(height: 200)
-                    
-                    if let processedImage = processedImage {
+                if let processedImage = processedImage {
+                    // 🎯 使用ZStack强制黑色背景，彻底解决白色背景问题
+                    ZStack {
+                        // 强制黑色背景，不受任何父视图影响
+                        Color.black
+                            .frame(maxHeight: 270)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        
+                        // 透明抠图结果
                         Image(uiImage: processedImage)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .frame(height: 180)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                    } else {
-                        VStack {
-                            Image(systemName: "wand.and.stars")
-                                .font(.title)
-                                .foregroundColor(.secondary)
-                            Text("处理中...")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+                            .frame(maxHeight: 250)
                     }
+                } else {
+                    Rectangle()
+                        .fill(Color(.systemGray6))
+                        .frame(height: 250)
+                        .overlay(
+                            VStack {
+                                Image(systemName: "wand.and.stars")
+                                    .font(.title)
+                                    .foregroundColor(.secondary)
+                                Text("处理中...")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        )
                 }
                 
                 Text("抠图结果")
@@ -244,7 +262,33 @@ struct ImageComparisonView: View {
     }
 }
 
-
+// MARK: - 透明背景视图
+struct TransparentBackgroundView: View {
+    var body: some View {
+        Canvas { context, size in
+            let squareSize: CGFloat = 12 // 更小的网格
+            let rows = Int(size.height / squareSize) + 1
+            let cols = Int(size.width / squareSize) + 1
+            
+            for row in 0..<rows {
+                for col in 0..<cols {
+                    let isEven = (row + col) % 2 == 0
+                    // 使用经典的透明背景网格颜色
+                    let color = isEven ? Color.white : Color.gray.opacity(0.3)
+                    
+                    let rect = CGRect(
+                        x: CGFloat(col) * squareSize,
+                        y: CGFloat(row) * squareSize,
+                        width: squareSize,
+                        height: squareSize
+                    )
+                    
+                    context.fill(Path(rect), with: .color(color))
+                }
+            }
+        }
+    }
+}
 
 // MARK: - 贴纸命名输入视图
 struct StickerNameInputView: View {
@@ -261,35 +305,85 @@ struct StickerNameInputView: View {
     
     var body: some View {
         NavigationView {
-            Form {
-                Section {
-                    // 预览图
-                    HStack {
-                        Spacer()
-                        Image(uiImage: processedImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(height: 120)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                        Spacer()
-                    }
-                }
-                
-                Section("基本信息") {
-                    TextField("给你的潮玩起个名字", text: $name)
-                    
-                    Picker("分类", selection: $selectedCategory) {
-                        ForEach(categories, id: \.self) { category in
-                            Text(category).tag(category)
+            // 🎯 彻底重构：用VStack替代Form，获得完全的背景控制权
+            ScrollView {
+                VStack(spacing: 24) {
+                    // 预览图区域 - 使用ZStack确保黑色背景不被覆盖
+                    VStack(spacing: 12) {
+                        Text("预览效果")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        
+                        ZStack {
+                            // 强制黑色背景，不受任何父视图影响
+                            Color.black
+                                .frame(height: 140)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            
+                            // 透明抠图结果
+                            Image(uiImage: processedImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(height: 120)
                         }
                     }
+                    
+                    // 基本信息区域
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("基本信息")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        
+                        VStack(alignment: .leading, spacing: 12) {
+                            // 名称输入
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("潮玩名称")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                
+                                TextField("给你的潮玩起个名字", text: $name)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                            }
+                            
+                            // 分类选择
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("分类")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                
+                                Picker("分类", selection: $selectedCategory) {
+                                    ForEach(categories, id: \.self) { category in
+                                        Text(category).tag(category)
+                                    }
+                                }
+                                .pickerStyle(SegmentedPickerStyle())
+                            }
+                        }
+                    }
+                    
+                    // 备注区域
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("备注")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("添加一些备注信息")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            
+                            TextField("添加一些备注信息...", text: $notes, axis: .vertical)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .lineLimit(3...6)
+                        }
+                    }
+                    
+                    Spacer(minLength: 20)
                 }
-                
-                Section("备注") {
-                    TextField("添加一些备注信息...", text: $notes, axis: .vertical)
-                        .lineLimit(3...6)
-                }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
             }
+            .background(Color(.systemGroupedBackground)) // 使用系统标准的分组背景色
             .navigationTitle("添加到图鉴")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

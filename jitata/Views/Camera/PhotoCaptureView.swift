@@ -17,7 +17,7 @@ struct PhotoCaptureView: UIViewControllerRepresentable {
         
         // 检查设备是否支持相机
         if UIImagePickerController.isSourceTypeAvailable(.camera) {
-            picker.sourceType = .camera
+        picker.sourceType = .camera
         } else {
             // 模拟器或不支持相机的设备，使用照片库
             picker.sourceType = .photoLibrary
