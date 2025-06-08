@@ -24,6 +24,7 @@ class ImageProcessor {
         case withBorder     // 带边框
         case glossy         // 光泽效果
         case vintage        // 复古效果
+        case transparent    // 纯透明无效果
     }
     
     /// 为图像添加贴纸效果
@@ -56,6 +57,10 @@ class ImageProcessor {
         case .vintage:
             // 复古效果
             processedImage = addVintageEffect(processedImage)
+            
+        case .transparent:
+            // 纯透明无任何效果，保持原始抠图结果
+            break
         }
         
         return renderImage(processedImage) ?? image
@@ -199,6 +204,121 @@ class ImageProcessor {
         UIGraphicsEndImageContext()
         
         return newImage ?? image
+    }
+    
+    /// 将抠图结果裁剪为1:1比例，最小化留白区域
+    func cropToSquareAspectRatio(_ image: UIImage) -> UIImage {
+        guard let cgImage = image.cgImage else { return image }
+        
+        // 获取图片非透明区域的边界
+        let bounds = getNonTransparentBounds(cgImage)
+        
+        // 如果无法检测到有效内容，返回原图
+        guard bounds != .zero else { return image }
+        
+        // 计算正方形尺寸（取较大的边）
+        let squareSize = max(bounds.width, bounds.height)
+        
+        // 计算居中位置
+        let centerX = bounds.midX
+        let centerY = bounds.midY
+        let squareRect = CGRect(
+            x: centerX - squareSize/2,
+            y: centerY - squareSize/2,
+            width: squareSize,
+            height: squareSize
+        )
+        
+        // 确保裁剪区域不超出原图边界，并适当扩展
+        let imageSize = CGSize(width: cgImage.width, height: cgImage.height)
+        let padding: CGFloat = squareSize * 0.1 // 添加10%的边距
+        let finalSquareSize = squareSize + padding * 2
+        
+        let finalRect = CGRect(
+            x: max(0, centerX - finalSquareSize/2),
+            y: max(0, centerY - finalSquareSize/2),
+            width: min(finalSquareSize, imageSize.width),
+            height: min(finalSquareSize, imageSize.height)
+        )
+        
+        // 裁剪图片
+        guard let croppedCGImage = cgImage.cropping(to: finalRect) else { return image }
+        
+        // 创建正方形画布
+        let finalSize = CGSize(width: finalSquareSize, height: finalSquareSize)
+        UIGraphicsBeginImageContextWithOptions(finalSize, false, image.scale)
+        
+        let drawRect = CGRect(
+            x: (finalSize.width - CGFloat(croppedCGImage.width)) / 2,
+            y: (finalSize.height - CGFloat(croppedCGImage.height)) / 2,
+            width: CGFloat(croppedCGImage.width),
+            height: CGFloat(croppedCGImage.height)
+        )
+        
+        let croppedUIImage = UIImage(cgImage: croppedCGImage, scale: image.scale, orientation: image.imageOrientation)
+        croppedUIImage.draw(in: drawRect)
+        
+        let result = UIGraphicsGetImageFromCurrentImageContext() ?? image
+        UIGraphicsEndImageContext()
+        
+        return result
+    }
+    
+    /// 检测图片中非透明像素的边界
+    private func getNonTransparentBounds(_ cgImage: CGImage) -> CGRect {
+        let width = cgImage.width
+        let height = cgImage.height
+        let bytesPerPixel = 4
+        let bytesPerRow = width * bytesPerPixel
+        
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: bytesPerRow,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              ) else {
+            return CGRect(x: 0, y: 0, width: width, height: height)
+        }
+        
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        
+        guard let data = context.data else {
+            return CGRect(x: 0, y: 0, width: width, height: height)
+        }
+        
+        let pixels = data.bindMemory(to: UInt8.self, capacity: width * height * bytesPerPixel)
+        
+        var minX = width
+        var maxX = 0
+        var minY = height
+        var maxY = 0
+        
+        // 扫描所有像素，找到非透明区域的边界
+        for y in 0..<height {
+            for x in 0..<width {
+                let pixelIndex = (y * width + x) * bytesPerPixel
+                let alpha = pixels[pixelIndex + 3] // Alpha通道
+                
+                // 如果像素不是完全透明
+                if alpha > 10 { // 允许一些容差
+                    minX = min(minX, x)
+                    maxX = max(maxX, x)
+                    minY = min(minY, y)
+                    maxY = max(maxY, y)
+                }
+            }
+        }
+        
+        // 如果没有找到非透明像素，返回全图
+        if minX >= maxX || minY >= maxY {
+            return CGRect(x: 0, y: 0, width: width, height: height)
+        }
+        
+        return CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
     }
     
     /// 创建缩略图

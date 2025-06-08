@@ -25,7 +25,8 @@ final class ToySticker: Identifiable {
         self.name = name
         self.categoryName = categoryName
         self.originalImageData = originalImage.jpegData(compressionQuality: 0.8) ?? Data()
-        self.processedImageData = processedImage.jpegData(compressionQuality: 0.9) ?? Data()
+        // 🎯 修复：使用PNG格式保存抠图结果，保持透明背景
+        self.processedImageData = processedImage.pngData() ?? Data()
         self.createdDate = Date()
         self.notes = notes
         self.isFavorite = false

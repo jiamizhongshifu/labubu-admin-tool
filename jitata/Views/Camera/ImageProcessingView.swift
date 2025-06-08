@@ -157,11 +157,20 @@ struct ImageProcessingView: View {
         
         isSaving = true
         
+        // 🎯 新增：保存前先将图片裁剪为1:1比例，最小化留白区域
+        let squareImage = ImageProcessor.shared.cropToSquareAspectRatio(processedImage)
+        
+        // 🎯 应用透明贴纸效果（无白色背景）
+        let finalImageWithEffect = ImageProcessor.shared.applyStickerEffect(
+            to: squareImage,
+            style: .transparent
+        )
+        
         let sticker = ToySticker(
             name: name,
             categoryName: category,
             originalImage: originalImage,
-            processedImage: processedImage,
+            processedImage: finalImageWithEffect,
             notes: notes
         )
         

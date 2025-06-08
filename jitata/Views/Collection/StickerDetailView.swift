@@ -6,288 +6,285 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct StickerDetailView: View {
     let sticker: ToySticker
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.presentationMode) var presentationMode
+    @Query private var allStickers: [ToySticker]
+    
+    @State private var selectedStickerIndex: Int = 0
     @State private var showingEditSheet = false
     @State private var showingDeleteAlert = false
+    @State private var showingSeriesView = false
+    
+    // 获取当天收集的贴纸
+    var todayStickers: [ToySticker] {
+        let calendar = Calendar.current
+        let stickers = allStickers.filter { otherSticker in
+            calendar.isDate(otherSticker.createdDate, inSameDayAs: sticker.createdDate)
+        }.sorted { $0.createdDate < $1.createdDate }
+        
+        return stickers
+    }
+    
+    // 当前选中的贴纸
+    var currentSticker: ToySticker {
+        return todayStickers.indices.contains(selectedStickerIndex) ? todayStickers[selectedStickerIndex] : sticker
+    }
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                
-                // 图片展示区域
-                ZStack {
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(Color(.systemGray6))
-                        .frame(height: 300)
-                    
-                    if let image = sticker.processedImage {
-                        Image(uiImage: image)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxHeight: 280)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                            .shadow(radius: 10)
-                    } else {
-                        VStack {
-                            Image(systemName: "photo")
-                                .font(.system(size: 50))
-                                .foregroundColor(.secondary)
-                            Text("图片加载失败")
-                                .font(.headline)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-                
-                // 基本信息
-                VStack(alignment: .leading, spacing: 16) {
-                    
-                    // 名称和收藏按钮
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(sticker.name)
-                                .font(.title)
-                                .fontWeight(.bold)
-                            
-                            HStack {
-                                Image(systemName: "tag.fill")
-                                    .foregroundColor(.blue)
-                                Text(sticker.categoryName)
-                                    .font(.subheadline)
-                                    .foregroundColor(.blue)
+        ZStack {
+            Color(.systemGroupedBackground)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // 当天收集的潮玩小图横向滚动
+                if todayStickers.count > 1 {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(Array(todayStickers.enumerated()), id: \.element.id) { index, daySticker in
+                                ThumbnailView(
+                                    sticker: daySticker,
+                                    isSelected: index == selectedStickerIndex
+                                )
+                                .onTapGesture {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        selectedStickerIndex = index
+                                    }
+                                }
                             }
                         }
-                        
-                        Spacer()
-                        
-                        Button(action: toggleFavorite) {
-                            Image(systemName: sticker.isFavorite ? "heart.fill" : "heart")
-                                .font(.title2)
-                                .foregroundColor(.red)
-                        }
+                        .padding(.horizontal, 20)
                     }
-                    
-                    Divider()
-                    
-                    // 收集信息
-                    InfoSection(title: "收集信息") {
-                        InfoRow(label: "收集时间", value: formatDetailDate(sticker.createdDate))
-                        InfoRow(label: "分类", value: sticker.categoryName)
+                    .padding(.top, 20)
+                    .padding(.bottom, 30)
+                }
+                
+                // 中间区域 - 大图展示和左右滑动
+                TabView(selection: $selectedStickerIndex) {
+                    ForEach(Array(todayStickers.enumerated()), id: \.element.id) { index, daySticker in
+                        LargeImageView(sticker: daySticker)
+                            .tag(index)
                     }
-                    
-                    // 备注信息
-                    if !sticker.notes.isEmpty {
-                        InfoSection(title: "备注") {
-                            Text(sticker.notes)
-                                .font(.body)
-                                .foregroundColor(.primary)
-                                .padding(.vertical, 8)
-                        }
-                    }
-                    
-                    Divider()
-                    
-                    // 操作按钮
+                }
+                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+                .frame(height: 350)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+                
+                // 底部区域 - 潮玩信息和查看系列按钮
+                VStack(spacing: 16) {
+                    // 潮玩基本信息
                     VStack(spacing: 12) {
+                        Text(currentSticker.name)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.primary)
                         
-                        // 编辑按钮
-                        Button(action: { showingEditSheet = true }) {
-                            HStack {
-                                Image(systemName: "pencil")
-                                Text("编辑")
-                            }
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .cornerRadius(12)
+                        HStack {
+                            Image(systemName: "tag.fill")
+                                .foregroundColor(.blue)
+                            Text(currentSticker.categoryName)
+                                .font(.subheadline)
+                                .foregroundColor(.blue)
                         }
                         
-                        // 分享按钮
-                        Button(action: shareSticker) {
-                            HStack {
-                                Image(systemName: "square.and.arrow.up")
-                                Text("分享")
-                            }
-                            .font(.headline)
-                            .foregroundColor(.blue)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue.opacity(0.1))
-                            .cornerRadius(12)
-                        }
-                        
-                        // 删除按钮
-                        Button(action: { showingDeleteAlert = true }) {
-                            HStack {
-                                Image(systemName: "trash")
-                                Text("删除")
-                            }
-                            .font(.headline)
-                            .foregroundColor(.red)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.red.opacity(0.1))
-                            .cornerRadius(12)
+                        if !currentSticker.notes.isEmpty {
+                            Text(currentSticker.notes)
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(3)
                         }
                     }
+                    .padding(.horizontal, 20)
+                    
+                    // 查看系列按钮
+                    Button(action: {
+                        showingSeriesView = true
+                    }) {
+                        HStack {
+                            Image(systemName: "cube.box.fill")
+                            Text("查看系列")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.blue, Color.purple]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(16)
+                        .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
+                    }
+                    .padding(.horizontal, 20)
                 }
-                .padding(.horizontal)
+                
+                Spacer()
             }
+            .padding(.bottom, 40)
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(false)
-        .sheet(isPresented: $showingEditSheet) {
-            StickerEditView(sticker: sticker)
-        }
-        .alert("删除确认", isPresented: $showingDeleteAlert) {
-            Button("取消", role: .cancel) { }
-            Button("删除", role: .destructive) {
-                deleteSticker()
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                VStack(spacing: 2) {
+                    Text(formatDate(sticker.createdDate))
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.primary)
+                    
+                    Text("\(todayStickers.count)个潮玩")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                }
             }
-        } message: {
-            Text("确定要删除这个潮玩贴纸吗？此操作无法撤销。")
+        }
+        .onAppear {
+            // 设置初始选中的贴纸索引
+            if let index = todayStickers.firstIndex(where: { $0.id == sticker.id }) {
+                selectedStickerIndex = index
+            }
+        }
+        .sheet(isPresented: $showingSeriesView) {
+            SeriesInfoView(categoryName: currentSticker.categoryName)
         }
     }
     
-    private func toggleFavorite() {
-        // 这里需要实现收藏切换逻辑
-        // 由于@Model的限制，实际实现需要通过环境对象
-        print("切换收藏状态")
-    }
-    
-    private func shareSticker() {
-        // 实现分享功能
-        guard let image = sticker.processedImage else { return }
-        
-        let activityController = UIActivityViewController(
-            activityItems: [image, sticker.name],
-            applicationActivities: nil
-        )
-        
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = windowScene.windows.first {
-            window.rootViewController?.present(activityController, animated: true)
-        }
-    }
-    
-    private func deleteSticker() {
-        // 实现删除功能
-        // 需要通过环境对象来删除
-        presentationMode.wrappedValue.dismiss()
+    // 格式化日期
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M月dd日"
+        formatter.locale = Locale(identifier: "zh_CN")
+        return formatter.string(from: date)
     }
 }
 
-// MARK: - 信息区域组件
-struct InfoSection<Content: View>: View {
-    let title: String
-    let content: Content
-    
-    init(title: String, @ViewBuilder content: () -> Content) {
-        self.title = title
-        self.content = content()
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.headline)
-                .foregroundColor(.primary)
-            
-            content
-        }
-    }
-}
-
-struct InfoRow: View {
-    let label: String
-    let value: String
-    
-    var body: some View {
-        HStack {
-            Text(label)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            
-            Spacer()
-            
-            Text(value)
-                .font(.subheadline)
-                .foregroundColor(.primary)
-                .multilineTextAlignment(.trailing)
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-// MARK: - 编辑视图
-struct StickerEditView: View {
+// MARK: - 缩略图组件
+struct ThumbnailView: View {
     let sticker: ToySticker
-    @Environment(\.presentationMode) var presentationMode
+    let isSelected: Bool
     
-    @State private var name: String
-    @State private var categoryName: String
-    @State private var notes: String
-    
-    init(sticker: ToySticker) {
-        self.sticker = sticker
-        self._name = State(initialValue: sticker.name)
-        self._categoryName = State(initialValue: sticker.categoryName)
-        self._notes = State(initialValue: sticker.notes)
+    var body: some View {
+        ZStack {
+            // 选中状态的边框
+            Circle()
+                .stroke(
+                    isSelected ? Color.blue : Color.clear,
+                    lineWidth: 3
+                )
+                .frame(width: 70, height: 70)
+            
+            // 图片 - 移除背景，直接显示透明图片
+            Group {
+                if let image = sticker.processedImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 60, height: 60)
+                } else {
+                    // 加载失败时的占位符，使用半透明圆形背景
+                    Circle()
+                        .fill(Color(.systemGray6))
+                        .frame(width: 60, height: 60)
+                        .overlay(
+                            Image(systemName: "photo")
+                                .font(.title3)
+                                .foregroundColor(.secondary)
+                        )
+                }
+            }
+        }
+        .scaleEffect(isSelected ? 1.1 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: isSelected)
     }
+}
+
+// MARK: - 大图展示组件
+struct LargeImageView: View {
+    let sticker: ToySticker
+    
+    var body: some View {
+        // 直接显示图片，去除白色背景
+        if let image = sticker.processedImage {
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(maxHeight: 320)
+        } else {
+            // 加载失败时的占位符，使用半透明背景
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color(.systemGray6).opacity(0.3))
+                .frame(height: 320)
+                .overlay(
+                    VStack(spacing: 12) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 50))
+                            .foregroundColor(.secondary)
+                        Text("图片加载失败")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                    }
+                )
+        }
+    }
+}
+
+// MARK: - 系列信息视图
+struct SeriesInfoView: View {
+    let categoryName: String
+    @Environment(\.presentationMode) var presentationMode
     
     var body: some View {
         NavigationView {
-            Form {
-                Section("基本信息") {
-                    TextField("名称", text: $name)
-                    TextField("分类", text: $categoryName)
-                }
+            ZStack {
+                Color(.systemGroupedBackground)
+                    .ignoresSafeArea()
                 
-                Section("备注") {
-                    TextField("备注信息", text: $notes, axis: .vertical)
-                        .lineLimit(3...6)
+                VStack(spacing: 30) {
+                    // 占位内容
+                    VStack(spacing: 20) {
+                        Image(systemName: "cube.box.fill")
+                            .font(.system(size: 80))
+                            .foregroundColor(.blue)
+                        
+                        Text("\(categoryName)系列")
+                            .font(.title)
+                            .fontWeight(.bold)
+                        
+                        Text("系列信息功能开发中...")
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                        
+                        Text("这里将显示该潮玩系列的详细信息、相关产品和收集进度等内容。")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                    }
+                    
+                    Spacer()
                 }
+                .padding(.top, 60)
             }
-            .navigationTitle("编辑潮玩")
+            .navigationTitle("系列信息")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("取消") {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("完成") {
                         presentationMode.wrappedValue.dismiss()
                     }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("保存") {
-                        saveChanges()
-                    }
-                    .disabled(name.isEmpty)
                 }
             }
         }
     }
-    
-    private func saveChanges() {
-        // 实现保存逻辑
-        // 需要通过环境对象来更新数据
-        presentationMode.wrappedValue.dismiss()
-    }
-}
-
-// MARK: - 辅助函数
-private func formatDetailDate(_ date: Date) -> String {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .long
-    formatter.timeStyle = .short
-    formatter.locale = Locale(identifier: "zh_CN")
-    return formatter.string(from: date)
 }
 
 #Preview {

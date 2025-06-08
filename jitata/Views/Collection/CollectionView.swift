@@ -11,257 +11,187 @@ import SwiftData
 struct CollectionView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var stickers: [ToySticker]
-    @Query private var categories: [Category]
+    @State private var showingCamera = false
     
-    @State private var selectedCategory: String = "全部"
-    @State private var searchText = ""
-    @State private var showingGrid = true
-    
-    var filteredStickers: [ToySticker] {
-        var filtered = stickers
-        
-        // 按分类筛选
-        if selectedCategory != "全部" {
-            filtered = filtered.filter { $0.categoryName == selectedCategory }
-        }
-        
-        // 按搜索文本筛选
-        if !searchText.isEmpty {
-            filtered = filtered.filter { 
-                $0.name.localizedCaseInsensitiveContains(searchText) ||
-                $0.categoryName.localizedCaseInsensitiveContains(searchText) ||
-                $0.notes.localizedCaseInsensitiveContains(searchText)
-            }
-        }
-        
-        return filtered.sorted { $0.createdDate > $1.createdDate }
+    // 获取今日收集的贴纸
+    var todayStickers: [ToySticker] {
+        let today = Date()
+        let calendar = Calendar.current
+        return stickers.filter { sticker in
+            calendar.isDate(sticker.createdDate, inSameDayAs: today)
+        }.sorted { $0.createdDate > $1.createdDate }
     }
     
-    var allCategories: [String] {
-        let categoryNames = stickers.map { $0.categoryName }
-        let uniqueCategories = Array(Set(categoryNames)).sorted()
-        return ["全部"] + uniqueCategories
+    // 获取所有贴纸（按创建时间倒序）
+    var allStickers: [ToySticker] {
+        return stickers.sorted { $0.createdDate > $1.createdDate }
     }
+    
+    // 双列网格配置
+    private let columns = [
+        GridItem(.flexible(), spacing: 16),
+        GridItem(.flexible(), spacing: 16)
+    ]
     
     var body: some View {
-        NavigationView {
+        ZStack {
+            // 背景色
+            Color(.systemGroupedBackground)
+                .ignoresSafeArea()
+            
             VStack(spacing: 0) {
-                
-                // 搜索栏
-                SearchBar(text: $searchText)
-                    .padding(.horizontal)
-                    .padding(.top, 8)
-                
-                // 分类选择器
-                CategorySelector(
-                    categories: allCategories,
-                    selectedCategory: $selectedCategory
-                )
-                .padding(.vertical, 8)
-                
-                // 统计信息和视图切换
+                // 顶部日期和数量信息
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("我的图鉴")
-                            .font(.title2)
-                            .fontWeight(.bold)
+                        Text(formatTodayDate())
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(.primary)
                         
-                        Text("已收集 \(filteredStickers.count) 件潮玩")
-                            .font(.caption)
+                        Text("\(todayStickers.count)个潮玩")
+                            .font(.system(size: 16))
                             .foregroundColor(.secondary)
                     }
                     
                     Spacer()
-                    
-                    // 视图切换按钮
-                    HStack(spacing: 12) {
-                        Button(action: { showingGrid = true }) {
-                            Image(systemName: "grid.circle.fill")
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 30)
+                
+                // 潮玩网格展示
+                if allStickers.isEmpty {
+                    // 空状态
+                    VStack(spacing: 24) {
+                        Spacer()
+                        
+                        Image(systemName: "camera.viewfinder")
+                            .font(.system(size: 80))
+                            .foregroundColor(.secondary.opacity(0.5))
+                        
+                        VStack(spacing: 8) {
+                            Text("还没有收集任何潮玩")
                                 .font(.title2)
-                                .foregroundColor(showingGrid ? .blue : .gray)
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+                            
+                            Text("点击下方拍照按钮开始收集")
+                                .font(.body)
+                                .foregroundColor(.secondary)
                         }
                         
-                        Button(action: { showingGrid = false }) {
-                            Image(systemName: "list.bullet.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(!showingGrid ? .blue : .gray)
+                        Spacer()
+                    }
+                } else {
+                    ScrollView {
+                        LazyVGrid(columns: columns, spacing: 20) {
+                            ForEach(allStickers) { sticker in
+                                NavigationLink(destination: StickerDetailView(sticker: sticker)) {
+                                    SimpleStickerCard(sticker: sticker)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 120) // 为悬浮按钮留出空间
+                    }
+                }
+            }
+            
+            // 悬浮拍照按钮
+            VStack {
+                Spacer()
+                
+                HStack {
+                    Spacer()
+                    
+                    Button(action: {
+                        showingCamera = true
+                    }) {
+                        ZStack {
+                            // 外圈渐变背景
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [
+                                            Color(.systemBlue),
+                                            Color(.systemPurple)
+                                        ]),
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 70, height: 70)
+                                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+                            
+                            // 内圈图标
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 28, weight: .medium))
+                                .foregroundColor(.white)
                         }
                     }
+                    
+                    Spacer()
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 12)
-                
-                // 内容区域
-                if filteredStickers.isEmpty {
-                    EmptyCollectionView()
-                } else {
-                    if showingGrid {
-                        GridCollectionView(stickers: filteredStickers)
-                    } else {
-                        ListCollectionView(stickers: filteredStickers)
-                    }
-                }
+                .padding(.bottom, 40)
             }
-            .navigationTitle("")
-            .navigationBarHidden(false)
         }
-        .onAppear {
-            // 初始化默认分类
-            initializeDefaultCategories()
+        .fullScreenCover(isPresented: $showingCamera) {
+            CameraView()
         }
     }
     
-    private func initializeDefaultCategories() {
-        // 如果数据库中没有分类，添加默认分类
-        if categories.isEmpty {
-            for category in Category.defaultCategories {
-                modelContext.insert(category)
-            }
-            try? modelContext.save()
-        }
+    // 格式化今日日期
+    private func formatTodayDate() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M月dd日"
+        formatter.locale = Locale(identifier: "zh_CN")
+        return formatter.string(from: Date())
     }
 }
 
-// MARK: - 搜索栏
-struct SearchBar: View {
-    @Binding var text: String
+// MARK: - 简洁贴纸卡片
+struct SimpleStickerCard: View {
+    let sticker: ToySticker
     
     var body: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
-            
-            TextField("搜索潮玩...", text: $text)
-                .textFieldStyle(PlainTextFieldStyle())
-            
-            if !text.isEmpty {
-                Button(action: { text = "" }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color(.systemGray6))
-        .cornerRadius(10)
-    }
-}
-
-// MARK: - 分类选择器
-struct CategorySelector: View {
-    let categories: [String]
-    @Binding var selectedCategory: String
-    
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            LazyHStack(spacing: 12) {
-                ForEach(categories, id: \.self) { category in
-                    CategoryButton(
-                        title: category,
-                        isSelected: selectedCategory == category
-                    ) {
-                        selectedCategory = category
-                    }
-                }
-            }
-            .padding(.horizontal)
-        }
-    }
-}
-
-struct CategoryButton: View {
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.subheadline)
-                .fontWeight(isSelected ? .semibold : .regular)
-                .foregroundColor(isSelected ? .white : .primary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(isSelected ? Color.blue : Color(.systemGray6))
-                )
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-}
-
-// MARK: - 网格视图
-struct GridCollectionView: View {
-    let stickers: [ToySticker]
-    
-    private let columns = [
-        GridItem(.flexible()),
-        GridItem(.flexible()),
-        GridItem(.flexible())
-    ]
-    
-    var body: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: 16) {
-                ForEach(stickers) { sticker in
-                    NavigationLink(destination: StickerDetailView(sticker: sticker)) {
-                        StickerGridCard(sticker: sticker)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                }
-            }
-            .padding(.horizontal)
-        }
-    }
-}
-
-// MARK: - 列表视图
-struct ListCollectionView: View {
-    let stickers: [ToySticker]
-    
-    var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 12) {
-                ForEach(stickers) { sticker in
-                    NavigationLink(destination: StickerDetailView(sticker: sticker)) {
-                        StickerListCard(sticker: sticker)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                }
-            }
-            .padding(.horizontal)
-        }
-    }
-}
-
-// MARK: - 空状态视图
-struct EmptyCollectionView: View {
-    var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "tray")
-                .font(.system(size: 60))
-                .foregroundColor(.secondary)
-            
-            VStack(spacing: 8) {
-                Text("还没有收集任何潮玩")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                
-                Text("开始拍照收集你喜爱的潮流玩具吧！")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
+        VStack(spacing: 12) {
+            // 贴纸图片 - 无背景无投影直接展示
+            if let image = sticker.processedImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .aspectRatio(1, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+            } else {
+                // 加载失败占位符
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(.systemGray6))
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay(
+                        VStack(spacing: 8) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 24))
+                                .foregroundColor(.secondary)
+                            
+                            Text("加载失败")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    )
             }
             
-            // 这里可以添加一个跳转到拍照的按钮
+            // 贴纸名称
+            Text(sticker.name)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 40)
     }
 }
 
 #Preview {
-    CollectionView()
+    NavigationView {
+        CollectionView()
+    }
 } 
