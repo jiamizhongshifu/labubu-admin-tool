@@ -10,6 +10,7 @@ import AVFoundation
 import PhotosUI
 
 struct CameraView: View {
+    @Binding var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @StateObject private var cameraManager = CameraManager()
     @State private var showingImagePicker = false
@@ -43,7 +44,7 @@ struct CameraView: View {
                     // 返回按钮
                     Button(action: {
                         cameraManager.stopSession()
-                        dismiss()
+                        appState = .home
                     }) {
                         ZStack {
                             Circle()
@@ -210,11 +211,21 @@ struct CameraView: View {
         }
         .fullScreenCover(isPresented: $showingPhotoPreview) {
             if let capturedImage = cameraManager.capturedImage {
-                PhotoPreviewView(originalImage: capturedImage)
-                    .onDisappear {
-                        // 清除已拍摄的图片，准备下次拍摄
-                        cameraManager.capturedImage = nil
+                PhotoPreviewView(
+                    originalImage: capturedImage,
+                    onSaveSuccess: {
+                        // 🎯 修复：同时关闭预览页面和跳转到图鉴页面，避免闪现
+                        showingPhotoPreview = false
+                        appState = .collection
+                    },
+                    onCancel: {
+                        showingPhotoPreview = false
                     }
+                )
+                .onDisappear {
+                    // 清除已拍摄的图片，准备下次拍摄
+                    cameraManager.capturedImage = nil
+                }
             }
         }
         .alert("提示", isPresented: $showingAlert) {
@@ -358,5 +369,5 @@ struct CornerBracket: View {
 }
 
 #Preview {
-    CameraView()
+    CameraView(appState: .constant(.camera))
 } 

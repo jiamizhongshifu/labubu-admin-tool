@@ -19,12 +19,12 @@ struct StickerDetailView: View {
     @State private var showingDeleteAlert = false
     @State private var showingSeriesView = false
     
-    // 获取当天收集的贴纸
+    // 获取当天收集的贴纸（最新的在最左边）
     var todayStickers: [ToySticker] {
         let calendar = Calendar.current
         let stickers = allStickers.filter { otherSticker in
             calendar.isDate(otherSticker.createdDate, inSameDayAs: sticker.createdDate)
-        }.sorted { $0.createdDate < $1.createdDate }
+        }.sorted { $0.createdDate > $1.createdDate } // 改为降序排列，最新的在前
         
         return stickers
     }
@@ -42,24 +42,33 @@ struct StickerDetailView: View {
             VStack(spacing: 0) {
                 // 当天收集的潮玩小图横向滚动
                 if todayStickers.count > 1 {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            ForEach(Array(todayStickers.enumerated()), id: \.element.id) { index, daySticker in
-                                ThumbnailView(
-                                    sticker: daySticker,
-                                    isSelected: index == selectedStickerIndex
-                                )
-                                .onTapGesture {
-                                    withAnimation(.easeInOut(duration: 0.3)) {
-                                        selectedStickerIndex = index
+                    ScrollViewReader { proxy in
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 12) {
+                                ForEach(Array(todayStickers.enumerated()), id: \.element.id) { index, daySticker in
+                                    ThumbnailView(
+                                        sticker: daySticker,
+                                        isSelected: index == selectedStickerIndex
+                                    )
+                                    .id(index) // 为每个缩略图添加ID
+                                    .onTapGesture {
+                                        withAnimation(.easeInOut(duration: 0.3)) {
+                                            selectedStickerIndex = index
+                                        }
                                     }
                                 }
                             }
+                            .padding(.horizontal, 20)
                         }
-                        .padding(.horizontal, 20)
+                        .padding(.top, 20)
+                        .padding(.bottom, 30)
+                        .onChange(of: selectedStickerIndex) { _, newIndex in
+                            // 当选中索引变化时，自动滚动到相应位置
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                proxy.scrollTo(newIndex, anchor: .center)
+                            }
+                        }
                     }
-                    .padding(.top, 20)
-                    .padding(.bottom, 30)
                 }
                 
                 // 中间区域 - 大图展示和左右滑动
@@ -172,35 +181,26 @@ struct ThumbnailView: View {
     let isSelected: Bool
     
     var body: some View {
-        ZStack {
-            // 选中状态的边框
-            Circle()
-                .stroke(
-                    isSelected ? Color.blue : Color.clear,
-                    lineWidth: 3
-                )
-                .frame(width: 70, height: 70)
-            
-            // 图片 - 移除背景，直接显示透明图片
-            Group {
-                if let image = sticker.processedImage {
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 60, height: 60)
-                } else {
-                    // 加载失败时的占位符，使用半透明圆形背景
-                    Circle()
-                        .fill(Color(.systemGray6))
-                        .frame(width: 60, height: 60)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .font(.title3)
-                                .foregroundColor(.secondary)
-                        )
-                }
+        // 图片 - 使用透明度表示选中状态
+        Group {
+            if let image = sticker.processedImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 60, height: 60)
+            } else {
+                // 加载失败时的占位符，使用半透明圆形背景
+                Circle()
+                    .fill(Color(.systemGray6))
+                    .frame(width: 60, height: 60)
+                    .overlay(
+                        Image(systemName: "photo")
+                            .font(.title3)
+                            .foregroundColor(.secondary)
+                    )
             }
         }
+        .opacity(isSelected ? 1.0 : 0.6) // 选中状态100%透明度，未选中60%透明度
         .scaleEffect(isSelected ? 1.1 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: isSelected)
     }

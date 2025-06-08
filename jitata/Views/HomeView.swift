@@ -7,11 +7,56 @@
 
 import SwiftUI
 
+// 🎯 新增：定义应用的主要页面状态
+enum AppState {
+    case home
+    case camera
+    case collection
+}
+
 struct HomeView: View {
-    @State private var showingCamera = false
-    @State private var showingCollection = false
+    // 🎯 新增：使用 AppState 来管理当前页面
+    @State private var appState: AppState = .home
     
     var body: some View {
+        // 🎯 新增：根据 appState 切换页面
+        switch appState {
+        case .home:
+            homeContentView
+        case .camera:
+            CameraView(appState: $appState)
+        case .collection:
+            NavigationView {
+                CollectionView()
+                    .navigationBarTitleDisplayMode(.inline)
+                    .navigationBarBackButtonHidden(true)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button(action: {
+                                appState = .home
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "chevron.left")
+                                        .font(.system(size: 16, weight: .semibold))
+                                    Text("返回")
+                                        .font(.body)
+                                }
+                                .foregroundColor(.blue)
+                            }
+                        }
+                        
+                        ToolbarItem(placement: .principal) {
+                            Text("我的图鉴")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                        }
+                    }
+            }
+        }
+    }
+    
+    // 🎯 新增：将原有的首页内容封装成一个计算属性
+    private var homeContentView: some View {
         NavigationView {
             ZStack {
                 // 背景渐变
@@ -46,7 +91,8 @@ struct HomeView: View {
                     VStack(spacing: 24) {
                         // 拍照收集按钮
                         Button(action: {
-                            showingCamera = true
+                            // 🎯 修复：点击按钮时更新 appState
+                            appState = .camera
                         }) {
                             HStack(spacing: 16) {
                                 Image(systemName: "camera.fill")
@@ -82,7 +128,8 @@ struct HomeView: View {
                         
                         // 我的图鉴按钮
                         Button(action: {
-                            showingCollection = true
+                            // 🎯 修复：点击按钮时更新 appState
+                            appState = .collection
                         }) {
                             HStack(spacing: 16) {
                                 Image(systemName: "book.fill")
@@ -142,37 +189,6 @@ struct HomeView: View {
                 }
             }
             .navigationBarHidden(true)
-        }
-        .fullScreenCover(isPresented: $showingCamera) {
-            CameraView()
-        }
-        .fullScreenCover(isPresented: $showingCollection) {
-            NavigationView {
-                CollectionView()
-                    .navigationBarTitleDisplayMode(.inline)
-                    .navigationBarBackButtonHidden(true)
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarLeading) {
-                            Button(action: {
-                                showingCollection = false
-                            }) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "chevron.left")
-                                        .font(.system(size: 16, weight: .semibold))
-                                    Text("返回")
-                                        .font(.body)
-                                }
-                                .foregroundColor(.blue)
-                            }
-                        }
-                        
-                        ToolbarItem(placement: .principal) {
-                            Text("我的图鉴")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                    }
-            }
         }
     }
 }

@@ -11,143 +11,119 @@ import SwiftData
 struct CollectionView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var stickers: [ToySticker]
-    @State private var showingCamera = false
+    @State private var showingStickerDetail: ToySticker?
     
-    // 获取今日收集的贴纸
-    var todayStickers: [ToySticker] {
-        let today = Date()
-        let calendar = Calendar.current
-        return stickers.filter { sticker in
-            calendar.isDate(sticker.createdDate, inSameDayAs: today)
-        }.sorted { $0.createdDate > $1.createdDate }
+    // 按日期和类别分组的贴纸
+    private var groupedStickers: [Date: [ToySticker]] {
+        let grouped = Dictionary(grouping: stickers.sorted(by: { $0.createdDate > $1.createdDate })) { (sticker) -> Date in
+            return Calendar.current.startOfDay(for: sticker.createdDate)
+        }
+        return grouped
     }
     
-    // 获取所有贴纸（按创建时间倒序）
-    var allStickers: [ToySticker] {
-        return stickers.sorted { $0.createdDate > $1.createdDate }
+    private var sortedDates: [Date] {
+        groupedStickers.keys.sorted(by: >)
     }
-    
-    // 双列网格配置
-    private let columns = [
-        GridItem(.flexible(), spacing: 16),
-        GridItem(.flexible(), spacing: 16)
-    ]
-    
+
     var body: some View {
         ZStack {
-            // 背景色
-            Color(.systemGroupedBackground)
-                .ignoresSafeArea()
+            // 背景渐变
+            LinearGradient(
+                gradient: Gradient(colors: [Color.blue.opacity(0.05), Color.purple.opacity(0.05)]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
             
-            VStack(spacing: 0) {
-                // 顶部日期和数量信息
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(formatTodayDate())
-                            .font(.system(size: 28, weight: .bold))
-                            .foregroundColor(.primary)
-                        
-                        Text("\(todayStickers.count)个潮玩")
-                            .font(.system(size: 16))
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
-                .padding(.bottom, 30)
-                
-                // 潮玩网格展示
-                if allStickers.isEmpty {
-                    // 空状态
-                    VStack(spacing: 24) {
-                        Spacer()
-                        
-                        Image(systemName: "camera.viewfinder")
-                            .font(.system(size: 80))
-                            .foregroundColor(.secondary.opacity(0.5))
-                        
-                        VStack(spacing: 8) {
-                            Text("还没有收集任何潮玩")
+            // 主滚动视图
+            ScrollView {
+                VStack(spacing: 24) {
+                    if stickers.isEmpty {
+                        // 空状态提示
+                        VStack {
+                            Image(systemName: "camera.macro")
+                                .font(.system(size: 60))
+                                .foregroundColor(.secondary.opacity(0.5))
+                                .padding(.bottom, 20)
+                            
+                            Text("图鉴是空的")
                                 .font(.title2)
                                 .fontWeight(.medium)
-                                .foregroundColor(.primary)
                             
-                            Text("点击下方拍照按钮开始收集")
-                                .font(.body)
+                            Text("快去拍摄你的第一个潮玩吧！")
+                                .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
-                        
-                        Spacer()
-                    }
-                } else {
-                    ScrollView {
-                        LazyVGrid(columns: columns, spacing: 20) {
-                            ForEach(allStickers) { sticker in
-                                NavigationLink(destination: StickerDetailView(sticker: sticker)) {
-                                    SimpleStickerCard(sticker: sticker)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 500)
+                    } else {
+                        ForEach(sortedDates, id: \.self) { date in
+                            VStack(alignment: .leading, spacing: 12) {
+                                GroupHeaderView(date: date)
+                                
+                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100, maximum: 120))], spacing: 16) {
+                                    if let stickersForDate = groupedStickers[date] {
+                                        ForEach(stickersForDate) { sticker in
+                                            SimpleStickerCard(sticker: sticker)
+                                                .onTapGesture {
+                                                    self.showingStickerDetail = sticker
+                                                }
+                                        }
+                                    }
                                 }
-                                .buttonStyle(PlainButtonStyle())
+                                .padding(.horizontal)
                             }
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 120) // 为悬浮按钮留出空间
                     }
                 }
-            }
-            
-            // 悬浮拍照按钮
-            VStack {
-                Spacer()
-                
-                HStack {
-                    Spacer()
-                    
-                    Button(action: {
-                        showingCamera = true
-                    }) {
-                        ZStack {
-                            // 外圈渐变背景
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            Color(.systemBlue),
-                                            Color(.systemPurple)
-                                        ]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .frame(width: 70, height: 70)
-                                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
-                            
-                            // 内圈图标
-                            Image(systemName: "camera.fill")
-                                .font(.system(size: 28, weight: .medium))
-                                .foregroundColor(.white)
-                        }
-                    }
-                    
-                    Spacer()
-                }
-                .padding(.bottom, 40)
+                .padding(.vertical)
             }
         }
-        .fullScreenCover(isPresented: $showingCamera) {
-            CameraView()
+        .sheet(item: $showingStickerDetail) { sticker in
+            NavigationView {
+                StickerDetailView(sticker: sticker)
+            }
         }
-    }
-    
-    // 格式化今日日期
-    private func formatTodayDate() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "M月dd日"
-        formatter.locale = Locale(identifier: "zh_CN")
-        return formatter.string(from: Date())
     }
 }
+
+// MARK: - 分组头部视图
+struct GroupHeaderView: View {
+    let date: Date
+    
+    // 获取当天的贴纸数量
+    @Query private var stickers: [ToySticker]
+    
+    private var stickersOnDate: [ToySticker] {
+        stickers.filter { Calendar.current.isDate($0.createdDate, inSameDayAs: date) }
+    }
+    
+    var body: some View {
+        HStack {
+            // 日期显示 "MM月dd日"
+            Text(date, formatter: dayFormatter)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(.primary)
+            
+            // 当天收集的总数
+            Text("收集了 \(stickersOnDate.count) 件")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.secondary)
+                .padding(.leading, 8)
+            
+            Spacer()
+        }
+        .padding(.horizontal)
+    }
+}
+
+// 日期格式化器
+private let dayFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "M月d日"
+    return formatter
+}()
 
 // MARK: - 简洁贴纸卡片
 struct SimpleStickerCard: View {

@@ -9,6 +9,8 @@ import SwiftUI
 
 struct PhotoPreviewView: View {
     let originalImage: UIImage
+    let onSaveSuccess: () -> Void
+    let onCancel: () -> Void
     @State private var processedImage: UIImage?
     @State private var showingOriginal = false
     @State private var isProcessing = false
@@ -123,6 +125,29 @@ struct PhotoPreviewView: View {
                     }
                     .opacity((isProcessing || (processedImage == nil && !showingOriginal)) ? 0.5 : 1.0)
                     
+                    // 重拍按钮
+                    VStack(spacing: 8) {
+                        Button(action: {
+                            onCancel()
+                        }) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.black.opacity(0.6))
+                                    .frame(width: 60, height: 60)
+                                
+                                Image(systemName: "arrow.uturn.left")
+                                    .font(.system(size: 20, weight: .medium))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        
+                        Text("重拍")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                            .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
+                    }
+                    
                     // 确认按钮
                     VStack(spacing: 8) {
                         Button(action: { 
@@ -152,7 +177,7 @@ struct PhotoPreviewView: View {
                     
                     // 取消按钮
                     VStack(spacing: 8) {
-                        Button(action: { dismiss() }) {
+                        Button(action: { onCancel() }) {
                             ZStack {
                                 Circle()
                                     .fill(Color.black.opacity(0.6))
@@ -204,11 +229,28 @@ struct PhotoPreviewView: View {
                     processedImage: ImageProcessor.shared.cropToSquareAspectRatio(processedImage),
                     onRetake: {
                         showingConfirmation = false
-                        dismiss()
+                        onCancel()
                     },
                     onConfirm: { name, category, notes in
-                        showingConfirmation = false
-                        saveSticker(name: name, category: category, notes: notes, image: processedImage)
+                        // 保存贴纸
+                        let squareImage = ImageProcessor.shared.cropToSquareAspectRatio(processedImage)
+                        let finalImageWithEffect = ImageProcessor.shared.applyStickerEffect(
+                            to: squareImage,
+                            style: .transparent
+                        )
+                        
+                        let sticker = ToySticker(
+                            name: name,
+                            categoryName: category,
+                            originalImage: originalImage,
+                            processedImage: finalImageWithEffect,
+                            notes: notes
+                        )
+                        
+                        DataManager.shared.addToySticker(sticker)
+                        
+                        // 🎯 修复：直接触发跳转，不关闭任何页面，让CameraView统一处理
+                        onSaveSuccess()
                     },
                     onCancel: {
                         showingConfirmation = false
@@ -226,18 +268,33 @@ struct PhotoPreviewView: View {
                 notes: .constant(""),
                 categories: ["手办", "盲盒", "积木", "卡牌", "其他"]
             ) { name, category, notes in
-                saveSticker(name: name, category: category, notes: notes, image: finalImage)
+                // 保存贴纸
+                let squareImage = ImageProcessor.shared.cropToSquareAspectRatio(finalImage)
+                let finalImageWithEffect = ImageProcessor.shared.applyStickerEffect(
+                    to: squareImage,
+                    style: .transparent
+                )
+                
+                let sticker = ToySticker(
+                    name: name,
+                    categoryName: category,
+                    originalImage: originalImage,
+                    processedImage: finalImageWithEffect,
+                    notes: notes
+                )
+                
+                DataManager.shared.addToySticker(sticker)
+                
+                // 调用保存成功回调
+                onSaveSuccess()
             }
         }
         .alert("提示", isPresented: $showingAlert) {
-            Button("确定", role: .cancel) {
-                if alertMessage.contains("保存成功") {
-                    dismiss()
-                }
-            }
+            Button("确定", role: .cancel) { }
         } message: {
             Text(alertMessage)
         }
+
     }
     
     private func processImage(from sourceImage: UIImage? = nil) {
@@ -263,29 +320,7 @@ struct PhotoPreviewView: View {
         }
     }
     
-    private func saveSticker(name: String, category: String, notes: String, image: UIImage) {
-        // 🎯 新增：保存前先将图片裁剪为1:1比例，最小化留白区域
-        let squareImage = ImageProcessor.shared.cropToSquareAspectRatio(image)
-        
-        // 🎯 修复：在最终保存前，应用透明贴纸效果（无白色背景）
-        let finalImageWithEffect = ImageProcessor.shared.applyStickerEffect(
-            to: squareImage,
-            style: .transparent
-        )
-        
-        let sticker = ToySticker(
-            name: name,
-            categoryName: category,
-            originalImage: originalImage,
-            processedImage: finalImageWithEffect,
-            notes: notes
-        )
-        
-        DataManager.shared.addToySticker(sticker)
-        
-        alertMessage = "贴纸保存成功！"
-        showingAlert = true
-    }
+
 }
 
 // MARK: - 透明背景网格组件
@@ -330,6 +365,7 @@ struct StickerConfirmationView: View {
     @State private var selectedCategory = "手办"
     @State private var notes = ""
     @State private var isKeyboardVisible = false
+    @State private var shouldNavigateToCollection = false
     
     let categories = ["手办", "盲盒", "积木", "卡牌", "其他"]
     
@@ -407,19 +443,22 @@ struct StickerConfirmationView: View {
                         }
                         
                         // 底部操作按钮
-                        HStack(spacing: 12) {
+                        HStack(spacing: 30) {
                             // 重拍按钮
-                            Button(action: onRetake) {
-                                HStack {
-                                    Image(systemName: "camera.rotate")
-                                    Text("重拍")
+                            VStack(spacing: 8) {
+                                Button(action: {
+                                    onCancel()
+                                }) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color.black.opacity(0.6))
+                                            .frame(width: 60, height: 60)
+                                        
+                                        Image(systemName: "arrow.uturn.left")
+                                            .font(.system(size: 20, weight: .medium))
+                                            .foregroundColor(.white)
+                                    }
                                 }
-                                .font(.subheadline)
-                                .foregroundColor(.blue)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(Color.blue.opacity(0.1))
-                                .cornerRadius(12)
                             }
                             
                             // 取消按钮
@@ -454,5 +493,9 @@ struct StickerConfirmationView: View {
 }
 
 #Preview {
-    PhotoPreviewView(originalImage: UIImage(systemName: "photo")!)
+    PhotoPreviewView(
+        originalImage: UIImage(systemName: "photo")!,
+        onSaveSuccess: {},
+        onCancel: {}
+    )
 } 

@@ -23,6 +23,7 @@ struct ImageProcessingView: View {
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @State private var isSaving = false
+    @State private var shouldNavigateToCollection = false
     
     let categories = ["手办", "盲盒", "积木", "卡牌", "其他"]
     
@@ -119,14 +120,37 @@ struct ImageProcessingView: View {
             }
         }
         .alert("提示", isPresented: $showingAlert) {
-            Button("确定", role: .cancel) { 
-                if alertMessage.contains("保存成功") {
-                    // 保存成功后返回主页
-                    dismiss()
-                }
-            }
+            Button("确定", role: .cancel) { }
         } message: {
             Text(alertMessage)
+        }
+        .fullScreenCover(isPresented: $shouldNavigateToCollection) {
+            NavigationView {
+                CollectionView()
+                    .navigationBarTitleDisplayMode(.inline)
+                    .navigationBarBackButtonHidden(true)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button(action: {
+                                shouldNavigateToCollection = false
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "chevron.left")
+                                        .font(.system(size: 16, weight: .semibold))
+                                    Text("返回")
+                                        .font(.body)
+                                }
+                                .foregroundColor(.blue)
+                            }
+                        }
+                        
+                        ToolbarItem(placement: .principal) {
+                            Text("我的图鉴")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                        }
+                    }
+            }
         }
     }
     
@@ -180,8 +204,13 @@ struct ImageProcessingView: View {
         // 模拟保存过程
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             self.isSaving = false
-            self.alertMessage = "潮玩贴纸保存成功！已添加到你的图鉴中。"
-            self.showingAlert = true
+            // 先关闭当前页面，然后延迟跳转到图鉴页面，避免转换冲突
+            self.dismiss()
+            
+            // 延迟执行跳转，确保当前页面完全关闭后再跳转
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.shouldNavigateToCollection = true
+            }
         }
     }
 }
