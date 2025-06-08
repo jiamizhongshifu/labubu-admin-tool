@@ -13,6 +13,14 @@ struct CollectionView: View {
     @Query private var stickers: [ToySticker]
     @State private var showingStickerDetail: ToySticker?
     
+    // 新增：toast相关状态
+    let showSuccessToast: Bool
+    @State private var isToastVisible = false
+    
+    init(showSuccessToast: Bool = false) {
+        self.showSuccessToast = showSuccessToast
+    }
+    
     // 按日期和类别分组的贴纸
     private var groupedStickers: [Date: [ToySticker]] {
         let grouped = Dictionary(grouping: stickers.sorted(by: { $0.createdDate > $1.createdDate })) { (sticker) -> Date in
@@ -62,7 +70,10 @@ struct CollectionView: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 GroupHeaderView(date: date)
                                 
-                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100, maximum: 120))], spacing: 16) {
+                                LazyVGrid(columns: [
+                                    GridItem(.flexible(), spacing: 8),
+                                    GridItem(.flexible(), spacing: 8)
+                                ], spacing: 16) {
                                     if let stickersForDate = groupedStickers[date] {
                                         ForEach(stickersForDate) { sticker in
                                             SimpleStickerCard(sticker: sticker)
@@ -79,10 +90,50 @@ struct CollectionView: View {
                 }
                 .padding(.vertical)
             }
+            
+            // Toast 提示
+            if isToastVisible {
+                VStack {
+                    Spacer()
+                    
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.green)
+                        
+                        Text("收集成功！")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.primary)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 25)
+                            .fill(Color(.systemBackground))
+                            .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+                    )
+                    .padding(.bottom, 100) // 距离底部安全区域
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.spring(response: 0.5, dampingFraction: 0.8), value: isToastVisible)
+            }
         }
         .sheet(item: $showingStickerDetail) { sticker in
             NavigationView {
                 StickerDetailView(sticker: sticker)
+            }
+        }
+        .onAppear {
+            // 如果需要显示toast，则在页面出现时显示
+            if showSuccessToast {
+                isToastVisible = true
+                
+                // 2秒后自动隐藏
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    withAnimation {
+                        isToastVisible = false
+                    }
+                }
             }
         }
     }

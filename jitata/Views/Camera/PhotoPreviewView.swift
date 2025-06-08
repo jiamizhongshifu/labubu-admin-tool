@@ -14,7 +14,6 @@ struct PhotoPreviewView: View {
     @State private var processedImage: UIImage?
     @State private var showingOriginal = false
     @State private var isProcessing = false
-    @State private var showingCrop = false
     @State private var showingNameInput = false
     @State private var showingConfirmation = false
     @State private var showingAlert = false
@@ -101,30 +100,7 @@ struct PhotoPreviewView: View {
                 }
                 
                 // Layer 5: Bottom Controls - 绝对居中定位
-                HStack(spacing: 50) {
-                    // 裁剪按钮
-                    VStack(spacing: 8) {
-                        Button(action: { showingCrop = true }) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.black.opacity(0.6))
-                                    .frame(width: 60, height: 60)
-                                
-                                Image(systemName: "crop")
-                                    .font(.system(size: 20, weight: .medium))
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        .disabled(isProcessing || (processedImage == nil && !showingOriginal))
-                        
-                        Text("裁剪")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white)
-                            .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
-                    }
-                    .opacity((isProcessing || (processedImage == nil && !showingOriginal)) ? 0.5 : 1.0)
-                    
+                HStack(spacing: 60) {
                     // 重拍按钮
                     VStack(spacing: 8) {
                         Button(action: {
@@ -210,16 +186,6 @@ struct PhotoPreviewView: View {
         .onAppear {
             if processedImage == nil {
                 processImage()
-            }
-        }
-        .sheet(isPresented: $showingCrop) {
-            let imageToEdit = showingOriginal ? originalImage : (processedImage ?? originalImage)
-            ImageCropView(image: imageToEdit) { croppedImage in
-                if showingOriginal {
-                    processImage(from: croppedImage)
-                } else {
-                    processedImage = croppedImage
-                }
             }
         }
         .sheet(isPresented: $showingConfirmation) {
@@ -383,33 +349,25 @@ struct StickerConfirmationView: View {
             .ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // 顶部标题 - 最小高度
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("确认贴纸")
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundColor(.primary)
-                        
-                        Text("为您的潮玩添加名称")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    Spacer()
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .frame(height: 80)
+                // 标题 - 减少顶部留白
+                Text("添加信息")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                    .padding(.top, 2)
+                    .padding(.bottom, 20)
                 
-                // 主体图片 - 直接占据剩余空间
+                // 主体图片 - 增加上下留白
                 Image(uiImage: processedImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .clipped()
+                    .padding(.top, 16)
+                    .padding(.bottom, 20)
                 
-                // 底部输入区域 - 固定高度
-                VStack(spacing: 8) {
-                    // 分类选择 - 紧凑显示
+                // 底部输入区域
+                VStack(spacing: 16) {
+                    // 分类选择
                     Picker("分类", selection: $selectedCategory) {
                         ForEach(categories, id: \.self) { category in
                             Text(category).tag(category)
@@ -423,9 +381,20 @@ struct StickerConfirmationView: View {
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .padding(.horizontal, 20)
                     
-                    // 按钮区域
-                    VStack(spacing: 8) {
-                        // 确认按钮
+                    // 底部按钮 - 同一行布局
+                    HStack(spacing: 16) {
+                        // 取消按钮 - 简洁样式
+                        Button(action: onCancel) {
+                            Text("取消")
+                                .font(.headline)
+                                .foregroundColor(.black)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.white)
+                                .cornerRadius(12)
+                        }
+                        
+                        // 确认保存按钮
                         Button(action: {
                             let finalName = stickerName.isEmpty ? "未命名潮玩" : stickerName
                             onConfirm(finalName, selectedCategory, "")
@@ -441,45 +410,10 @@ struct StickerConfirmationView: View {
                             .background(Color.green)
                             .cornerRadius(12)
                         }
-                        
-                        // 底部操作按钮
-                        HStack(spacing: 30) {
-                            // 重拍按钮
-                            VStack(spacing: 8) {
-                                Button(action: {
-                                    onCancel()
-                                }) {
-                                    ZStack {
-                                        Circle()
-                                            .fill(Color.black.opacity(0.6))
-                                            .frame(width: 60, height: 60)
-                                        
-                                        Image(systemName: "arrow.uturn.left")
-                                            .font(.system(size: 20, weight: .medium))
-                                            .foregroundColor(.white)
-                                    }
-                                }
-                            }
-                            
-                            // 取消按钮
-                            Button(action: onCancel) {
-                                HStack {
-                                    Image(systemName: "xmark.circle")
-                                    Text("取消")
-                                }
-                                .font(.subheadline)
-                                .foregroundColor(.red)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(Color.red.opacity(0.1))
-                                .cornerRadius(12)
-                            }
-                        }
                     }
                     .padding(.horizontal, 20)
                 }
-                .frame(height: 200)
-                .padding(.bottom, 20)
+                .padding(.bottom, 40) // 底部安全区域
             }
         }
         .navigationBarHidden(true)

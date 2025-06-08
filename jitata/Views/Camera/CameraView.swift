@@ -38,6 +38,8 @@ struct CameraView: View {
                     .ignoresSafeArea()
             }
             
+
+            
             VStack {
                 // 顶部区域 - 返回按钮、日期和提示文字
                 HStack {
@@ -214,9 +216,9 @@ struct CameraView: View {
                 PhotoPreviewView(
                     originalImage: capturedImage,
                     onSaveSuccess: {
-                        // 🎯 修复：同时关闭预览页面和跳转到图鉴页面，避免闪现
+                        // 🎯 修复：同时关闭预览页面和跳转到图鉴页面，显示收集成功toast
                         showingPhotoPreview = false
-                        appState = .collection
+                        appState = .collection(showSuccessToast: true)
                     },
                     onCancel: {
                         showingPhotoPreview = false
@@ -367,6 +369,8 @@ struct CornerBracket: View {
         .frame(width: 23, height: 23)
     }
 }
+
+
 
 #Preview {
     CameraView(appState: .constant(.camera))

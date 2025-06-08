@@ -11,7 +11,7 @@ import SwiftUI
 enum AppState {
     case home
     case camera
-    case collection
+    case collection(showSuccessToast: Bool = false) // 添加toast参数
 }
 
 struct HomeView: View {
@@ -25,9 +25,9 @@ struct HomeView: View {
             homeContentView
         case .camera:
             CameraView(appState: $appState)
-        case .collection:
+        case .collection(let showSuccessToast):
             NavigationView {
-                CollectionView()
+                CollectionView(showSuccessToast: showSuccessToast)
                     .navigationBarTitleDisplayMode(.inline)
                     .navigationBarBackButtonHidden(true)
                     .toolbar {
@@ -129,7 +129,7 @@ struct HomeView: View {
                         // 我的图鉴按钮
                         Button(action: {
                             // 🎯 修复：点击按钮时更新 appState
-                            appState = .collection
+                            appState = .collection()
                         }) {
                             HStack(spacing: 16) {
                                 Image(systemName: "book.fill")

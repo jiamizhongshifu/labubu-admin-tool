@@ -13,7 +13,8 @@ struct CameraPreviewView: UIViewRepresentable {
     @ObservedObject var cameraManager: CameraManager
     
     func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: UIScreen.main.bounds)
+        let view = CameraPreviewUIView()
+        view.cameraManager = cameraManager
         
         if let previewLayer = cameraManager.previewLayer {
             previewLayer.frame = view.bounds
@@ -31,6 +32,31 @@ struct CameraPreviewView: UIViewRepresentable {
     }
 }
 
+// MARK: - 自定义UIView支持点击对焦
+class CameraPreviewUIView: UIView {
+    var cameraManager: CameraManager?
+    
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupGestureRecognizer()
+    }
+    
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupGestureRecognizer()
+    }
+    
+    private func setupGestureRecognizer() {
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+        addGestureRecognizer(tapGesture)
+    }
+    
+    @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
+        let location = gesture.location(in: self)
+        cameraManager?.focusAt(point: location, in: self)
+    }
+}
+
 // MARK: - 相机管理器
 class CameraManager: NSObject, ObservableObject {
     @Published var capturedImage: UIImage?
@@ -40,6 +66,7 @@ class CameraManager: NSObject, ObservableObject {
     private let session = AVCaptureSession()
     private let photoOutput = AVCapturePhotoOutput()
     private var videoDeviceInput: AVCaptureDeviceInput?
+    private var videoDevice: AVCaptureDevice?
     
     var previewLayer: AVCaptureVideoPreviewLayer?
     
@@ -88,6 +115,8 @@ class CameraManager: NSObject, ObservableObject {
             return
         }
         
+        self.videoDevice = videoDevice
+        
         do {
             let videoDeviceInput = try AVCaptureDeviceInput(device: videoDevice)
             
@@ -95,8 +124,29 @@ class CameraManager: NSObject, ObservableObject {
                 session.addInput(videoDeviceInput)
                 self.videoDeviceInput = videoDeviceInput
             }
+            
+            // 配置自动对焦
+            try videoDevice.lockForConfiguration()
+            
+            // 设置自动对焦模式
+            if videoDevice.isFocusModeSupported(.continuousAutoFocus) {
+                videoDevice.focusMode = .continuousAutoFocus
+            }
+            
+            // 设置自动曝光模式
+            if videoDevice.isExposureModeSupported(.continuousAutoExposure) {
+                videoDevice.exposureMode = .continuousAutoExposure
+            }
+            
+            // 设置自动白平衡
+            if videoDevice.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                videoDevice.whiteBalanceMode = .continuousAutoWhiteBalance
+            }
+            
+            videoDevice.unlockForConfiguration()
+            
         } catch {
-            print("无法创建视频输入: \(error)")
+            print("无法创建视频输入或配置设备: \(error)")
             session.commitConfiguration()
             return
         }
@@ -175,6 +225,36 @@ class CameraManager: NSObject, ObservableObject {
             DispatchQueue.main.async {
                 self.isSessionRunning = self.session.isRunning
             }
+        }
+    }
+    
+    // MARK: - 对焦功能
+    func focusAt(point: CGPoint, in view: UIView) {
+        guard let videoDevice = self.videoDevice,
+              let previewLayer = self.previewLayer else { return }
+        
+        // 将屏幕坐标转换为相机坐标
+        let devicePoint = previewLayer.captureDevicePointConverted(fromLayerPoint: point)
+        
+        do {
+            try videoDevice.lockForConfiguration()
+            
+            // 设置对焦点
+            if videoDevice.isFocusPointOfInterestSupported {
+                videoDevice.focusPointOfInterest = devicePoint
+                videoDevice.focusMode = .autoFocus
+            }
+            
+            // 设置曝光点
+            if videoDevice.isExposurePointOfInterestSupported {
+                videoDevice.exposurePointOfInterest = devicePoint
+                videoDevice.exposureMode = .autoExpose
+            }
+            
+            videoDevice.unlockForConfiguration()
+            
+        } catch {
+            print("对焦失败: \(error)")
         }
     }
 }
