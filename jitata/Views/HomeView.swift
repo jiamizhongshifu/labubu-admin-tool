@@ -27,7 +27,7 @@ struct HomeView: View {
             CameraView(appState: $appState)
         case .collection(let showSuccessToast):
             NavigationView {
-                CollectionView(showSuccessToast: showSuccessToast)
+                CollectionView(showSuccessToast: showSuccessToast, appState: $appState)
                     .navigationBarTitleDisplayMode(.inline)
                     .navigationBarBackButtonHidden(true)
                     .toolbar {

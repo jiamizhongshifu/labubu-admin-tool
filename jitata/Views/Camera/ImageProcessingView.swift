@@ -126,7 +126,7 @@ struct ImageProcessingView: View {
         }
         .fullScreenCover(isPresented: $shouldNavigateToCollection) {
             NavigationView {
-                CollectionView()
+                CollectionView(appState: .constant(.collection()))
                     .navigationBarTitleDisplayMode(.inline)
                     .navigationBarBackButtonHidden(true)
                     .toolbar {

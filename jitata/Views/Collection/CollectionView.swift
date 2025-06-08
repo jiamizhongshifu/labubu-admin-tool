@@ -17,8 +17,17 @@ struct CollectionView: View {
     let showSuccessToast: Bool
     @State private var isToastVisible = false
     
-    init(showSuccessToast: Bool = false) {
+    // 新增：删除相关状态
+    @State private var selectedStickerForDeletion: ToySticker?
+    @State private var showingDeleteConfirmation = false
+    @State private var editingStickerId: UUID?
+    
+    // 新增：导航状态
+    @Binding var appState: AppState
+    
+    init(showSuccessToast: Bool = false, appState: Binding<AppState>) {
         self.showSuccessToast = showSuccessToast
+        self._appState = appState
     }
     
     // 按日期和类别分组的贴纸
@@ -32,6 +41,28 @@ struct CollectionView: View {
     private var sortedDates: [Date] {
         groupedStickers.keys.sorted(by: >)
     }
+    
+    // 侧滑返回手势
+    private var swipeBackGesture: some Gesture {
+        DragGesture()
+            .onEnded { value in
+                // 检测从左边缘向右滑动的手势
+                let isFromLeftEdge = value.startLocation.x < 50
+                let isRightSwipe = value.translation.width > 80
+                let isHorizontalSwipe = abs(value.translation.width) > abs(value.translation.height)
+                
+                if isFromLeftEdge && isRightSwipe && isHorizontalSwipe {
+                    // 添加触觉反馈
+                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                    impactFeedback.impactOccurred()
+                    
+                    // 侧滑返回到首页
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        appState = .home
+                    }
+                }
+            }
+    }
 
     var body: some View {
         ZStack {
@@ -42,6 +73,12 @@ struct CollectionView: View {
                 endPoint: .bottom
             )
             .ignoresSafeArea()
+            .onTapGesture {
+                // 点击背景区域退出编辑模式
+                if editingStickerId != nil {
+                    editingStickerId = nil
+                }
+            }
             
             // 主滚动视图
             ScrollView {
@@ -73,13 +110,30 @@ struct CollectionView: View {
                                 LazyVGrid(columns: [
                                     GridItem(.flexible(), spacing: 8),
                                     GridItem(.flexible(), spacing: 8)
-                                ], spacing: 16) {
+                                ], spacing: 30) {
                                     if let stickersForDate = groupedStickers[date] {
                                         ForEach(stickersForDate) { sticker in
-                                            SimpleStickerCard(sticker: sticker)
-                                                .onTapGesture {
+                                            SimpleStickerCard(
+                                                sticker: sticker,
+                                                isEditing: editingStickerId == sticker.id,
+                                                isInEditingMode: editingStickerId != nil,
+                                                onDelete: {
+                                                    selectedStickerForDeletion = sticker
+                                                    showingDeleteConfirmation = true
+                                                }
+                                            )
+                                            .onTapGesture {
+                                                if editingStickerId == nil {
                                                     self.showingStickerDetail = sticker
                                                 }
+                                            }
+                                            .onLongPressGesture {
+                                                if editingStickerId == sticker.id {
+                                                    editingStickerId = nil
+                                                } else {
+                                                    editingStickerId = sticker.id
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -117,11 +171,68 @@ struct CollectionView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(.spring(response: 0.5, dampingFraction: 0.8), value: isToastVisible)
             }
+            
+            // 悬浮拍照按钮
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        appState = .camera
+                    }) {
+                        ZStack {
+                            // 彩色渐变背景
+                            Circle()
+                                .fill(
+                                    AngularGradient(
+                                        gradient: Gradient(colors: [
+                                            .red, .orange, .yellow, .green, 
+                                            .blue, .purple, .pink, .red
+                                        ]),
+                                        center: .center
+                                    )
+                                )
+                                .frame(width: 84, height: 84)
+                            
+                            // 内部白色圆圈
+                            Circle()
+                                .fill(Color.white)
+                                .frame(width: 70, height: 70)
+                            
+                            // 相机图标
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 34, weight: .semibold))
+                                .foregroundColor(.black)
+                        }
+                        .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+                    }
+                    .scaleEffect(editingStickerId != nil ? 0.8 : 1.0) // 编辑模式下缩小
+                    .opacity(editingStickerId != nil ? 0.6 : 1.0) // 编辑模式下半透明
+                    .animation(.easeInOut(duration: 0.3), value: editingStickerId != nil)
+                    Spacer()
+                }
+                .padding(.bottom, 30)
+            }
         }
+        .gesture(swipeBackGesture)
         .sheet(item: $showingStickerDetail) { sticker in
             NavigationView {
                 StickerDetailView(sticker: sticker)
             }
+        }
+        .alert("删除确认", isPresented: $showingDeleteConfirmation) {
+            Button("取消", role: .cancel) { 
+                // 取消删除时退出编辑模式
+                editingStickerId = nil
+                selectedStickerForDeletion = nil
+            }
+            Button("删除", role: .destructive) {
+                if let stickerToDelete = selectedStickerForDeletion {
+                    deleteToySticker(stickerToDelete)
+                }
+            }
+        } message: {
+            Text("确定要删除这个潮玩吗？删除后无法恢复。")
         }
         .onAppear {
             // 如果需要显示toast，则在页面出现时显示
@@ -135,6 +246,15 @@ struct CollectionView: View {
                     }
                 }
             }
+        }
+    }
+    
+    // MARK: - 删除方法
+    private func deleteToySticker(_ sticker: ToySticker) {
+        withAnimation {
+            modelContext.delete(sticker)
+            editingStickerId = nil
+            selectedStickerForDeletion = nil
         }
     }
 }
@@ -179,46 +299,82 @@ private let dayFormatter: DateFormatter = {
 // MARK: - 简洁贴纸卡片
 struct SimpleStickerCard: View {
     let sticker: ToySticker
+    let isEditing: Bool
+    let isInEditingMode: Bool
+    let onDelete: () -> Void
     
     var body: some View {
-        VStack(spacing: 12) {
-            // 贴纸图片 - 无背景无投影直接展示
-            if let image = sticker.processedImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .aspectRatio(1, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-            } else {
-                // 加载失败占位符
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(.systemGray6))
-                    .aspectRatio(1, contentMode: .fit)
-                    .overlay(
-                        VStack(spacing: 8) {
-                            Image(systemName: "photo")
-                                .font(.system(size: 24))
-                                .foregroundColor(.secondary)
-                            
-                            Text("加载失败")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    )
+        ZStack {
+            VStack(spacing: -8) {
+                // 贴纸图片 - 无背景无投影直接展示
+                if let image = sticker.processedImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .aspectRatio(1, contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .scaleEffect(0.77) // 缩小23%
+                } else {
+                    // 加载失败占位符
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.systemGray6))
+                        .aspectRatio(1, contentMode: .fit)
+                        .scaleEffect(0.77) // 缩小23%
+                        .overlay(
+                            VStack(spacing: 8) {
+                                Image(systemName: "photo")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.secondary)
+                                
+                                Text("加载失败")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        )
+                }
+                
+                // 贴纸名称
+                Text(sticker.name)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
+            .opacity(opacityValue)
+            .animation(.easeInOut(duration: 0.3), value: opacityValue)
             
-            // 贴纸名称
-            Text(sticker.name)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
+            // 删除按钮 - 只在编辑模式下显示
+            if isEditing {
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button(action: onDelete) {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(.red)
+                                .background(Color.white)
+                                .clipShape(Circle())
+                        }
+                        .offset(x: 8, y: -8)
+                    }
+                    Spacer()
+                }
+            }
+        }
+    }
+    
+    // 计算透明度值
+    private var opacityValue: Double {
+        if isInEditingMode {
+            return isEditing ? 1.0 : 0.4  // 编辑中的图片完全不透明，其他图片半透明
+        } else {
+            return 1.0  // 非编辑模式下所有图片完全不透明
         }
     }
 }
 
 #Preview {
     NavigationView {
-        CollectionView()
+        CollectionView(appState: .constant(.collection()))
     }
 } 
