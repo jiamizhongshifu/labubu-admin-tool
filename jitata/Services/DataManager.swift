@@ -84,8 +84,40 @@ class DataManager: ObservableObject {
         do {
             try context.save()
             toyStickers.insert(sticker, at: 0) // 插入到开头
+            
+            // 🚀 自动触发AI增强
+            Task {
+                await triggerAutoEnhancement(for: sticker, context: context)
+            }
         } catch {
             print("保存贴纸失败: \(error)")
+        }
+    }
+    
+    /// 自动触发AI增强
+    private func triggerAutoEnhancement(for sticker: ToySticker, context: ModelContext) async {
+        print("🔍 检查AI增强触发条件...")
+        print("   - 贴纸名称: \(sticker.name)")
+        print("   - 贴纸状态: \(sticker.currentEnhancementStatus)")
+        
+        // 检查API是否已配置
+        guard ImageEnhancementService.shared.isAPIConfigured else {
+            print("❌ API未配置，跳过AI增强")
+            return
+        }
+        
+        print("✅ API已配置，开始AI增强...")
+        
+        let success = await ImageEnhancementService.shared.enhanceSticker(sticker, modelContext: context)
+        
+        print("🎯 AI增强结果: \(success ? "成功" : "失败")")
+        
+        if success {
+            // 刷新数据
+            await MainActor.run {
+                print("🔄 刷新数据...")
+                loadToyStickers()
+            }
         }
     }
     

@@ -18,6 +18,7 @@ struct StickerDetailView: View {
     @State private var showingEditSheet = false
     @State private var showingDeleteAlert = false
     @State private var showingSeriesView = false
+    @State private var isRetryingEnhancement = false
     
     // 获取当天收集的贴纸（最新的在最左边）
     var todayStickers: [ToySticker] {
@@ -83,14 +84,19 @@ struct StickerDetailView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
                 
-                // 底部区域 - 潮玩信息和查看系列按钮
+                // 底部区域 - 潮玩信息和操作按钮
                 VStack(spacing: 16) {
                     // 潮玩基本信息
                     VStack(spacing: 12) {
-                        Text(currentSticker.name)
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.primary)
+                        HStack {
+                            Text(currentSticker.name)
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.primary)
+                            
+                            // AI增强状态指示器
+                            AIEnhancementStatusIndicator(sticker: currentSticker)
+                        }
                         
                         HStack {
                             Image(systemName: "tag.fill")
@@ -110,29 +116,65 @@ struct StickerDetailView: View {
                     }
                     .padding(.horizontal, 20)
                     
-                    // 查看系列按钮
-                    Button(action: {
-                        showingSeriesView = true
-                    }) {
-                        HStack {
-                            Image(systemName: "cube.box.fill")
-                            Text("查看系列")
+                    // 操作按钮区域
+                    VStack(spacing: 12) {
+                        // AI增强重试按钮（仅在失败时显示）
+                        if currentSticker.currentEnhancementStatus == .failed && currentSticker.canRetryEnhancement {
+                            Button(action: {
+                                retryEnhancement()
+                            }) {
+                                HStack {
+                                    if isRetryingEnhancement {
+                                        ProgressView()
+                                            .scaleEffect(0.8)
+                                            .foregroundColor(.white)
+                                    } else {
+                                        Image(systemName: "arrow.clockwise")
+                                    }
+                                    Text(isRetryingEnhancement ? "重新增强中..." : "重新AI增强")
+                                }
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color.orange, Color.red]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .cornerRadius(12)
+                                .shadow(color: .orange.opacity(0.3), radius: 6, x: 0, y: 3)
+                            }
+                            .disabled(isRetryingEnhancement)
+                            .padding(.horizontal, 20)
                         }
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            LinearGradient(
-                                gradient: Gradient(colors: [Color.blue, Color.purple]),
-                                startPoint: .leading,
-                                endPoint: .trailing
+                        
+                        // 查看系列按钮
+                        Button(action: {
+                            showingSeriesView = true
+                        }) {
+                            HStack {
+                                Image(systemName: "cube.box.fill")
+                                Text("查看系列")
+                            }
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [Color.blue, Color.purple]),
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
                             )
-                        )
-                        .cornerRadius(16)
-                        .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
+                            .cornerRadius(16)
+                            .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
+                        }
+                        .padding(.horizontal, 20)
                     }
-                    .padding(.horizontal, 20)
                 }
                 
                 Spacer()
@@ -166,6 +208,26 @@ struct StickerDetailView: View {
         }
     }
     
+    // MARK: - 私有方法
+    
+    /// 重试AI增强
+    private func retryEnhancement() {
+        Task {
+            isRetryingEnhancement = true
+            let success = await ImageEnhancementService.shared.retryEnhancement(currentSticker, modelContext: modelContext)
+            await MainActor.run {
+                isRetryingEnhancement = false
+                if success {
+                    // 增强成功，可以显示成功提示
+                } else {
+                    // 增强失败，可以显示失败提示
+                }
+            }
+        }
+    }
+    
+
+    
     // 格式化日期
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
@@ -181,9 +243,9 @@ struct ThumbnailView: View {
     let isSelected: Bool
     
     var body: some View {
-        // 图片 - 使用透明度表示选中状态
+        // 图片 - 优先显示增强图片
         Group {
-            if let image = sticker.processedImage {
+            if let image = sticker.displayImage {
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -211,8 +273,8 @@ struct LargeImageView: View {
     let sticker: ToySticker
     
     var body: some View {
-        // 直接显示图片，去除白色背景
-        if let image = sticker.processedImage {
+        // 优先显示增强图片
+        if let image = sticker.displayImage {
             Image(uiImage: image)
                 .resizable()
                 .aspectRatio(contentMode: .fit)

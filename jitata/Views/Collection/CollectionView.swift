@@ -306,31 +306,44 @@ struct SimpleStickerCard: View {
     var body: some View {
         ZStack {
             VStack(spacing: -8) {
-                // 贴纸图片 - 无背景无投影直接展示
-                if let image = sticker.processedImage {
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .aspectRatio(1, contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .scaleEffect(0.77) // 缩小23%
-                } else {
-                    // 加载失败占位符
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color(.systemGray6))
-                        .aspectRatio(1, contentMode: .fit)
-                        .scaleEffect(0.77) // 缩小23%
-                        .overlay(
-                            VStack(spacing: 8) {
-                                Image(systemName: "photo")
-                                    .font(.system(size: 24))
-                                    .foregroundColor(.secondary)
-                                
-                                Text("加载失败")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        )
+                // 贴纸图片容器
+                ZStack {
+                    // 贴纸图片 - 优先显示增强图片
+                    if let image = sticker.displayImage {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .aspectRatio(1, contentMode: .fit)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .scaleEffect(0.77) // 缩小23%
+                    } else {
+                        // 加载失败占位符
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color(.systemGray6))
+                            .aspectRatio(1, contentMode: .fit)
+                            .scaleEffect(0.77) // 缩小23%
+                            .overlay(
+                                VStack(spacing: 8) {
+                                    Image(systemName: "photo")
+                                        .font(.system(size: 24))
+                                        .foregroundColor(.secondary)
+                                    
+                                    Text("加载失败")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            )
+                    }
+                    
+                    // AI增强状态指示器
+                    VStack {
+                        HStack {
+                            Spacer()
+                            AIEnhancementStatusIndicator(sticker: sticker)
+                        }
+                        Spacer()
+                    }
+                    .padding(8)
                 }
                 
                 // 贴纸名称
@@ -371,6 +384,8 @@ struct SimpleStickerCard: View {
             return 1.0  // 非编辑模式下所有图片完全不透明
         }
     }
+    
+
 }
 
 #Preview {

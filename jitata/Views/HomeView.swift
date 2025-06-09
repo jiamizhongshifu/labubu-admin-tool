@@ -17,41 +17,39 @@ enum AppState {
 struct HomeView: View {
     // 🎯 新增：使用 AppState 来管理当前页面
     @State private var appState: AppState = .home
+    @State private var showingDatabaseResetAlert = false
     
     var body: some View {
-        // 🎯 新增：根据 appState 切换页面
-        switch appState {
-        case .home:
-            homeContentView
-        case .camera:
-            CameraView(appState: $appState)
-        case .collection(let showSuccessToast):
-            NavigationView {
-                CollectionView(showSuccessToast: showSuccessToast, appState: $appState)
-                    .navigationBarTitleDisplayMode(.inline)
-                    .navigationBarBackButtonHidden(true)
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarLeading) {
-                            Button(action: {
-                                appState = .home
-                            }) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "chevron.left")
-                                        .font(.system(size: 16, weight: .semibold))
-                                    Text("返回")
-                                        .font(.body)
-                                }
-                                .foregroundColor(.blue)
-                            }
-                        }
-                        
-                        ToolbarItem(placement: .principal) {
-                            Text("我的图鉴")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
+        ZStack {
+            // 🎯 新增：根据 appState 切换页面
+            Group {
+                switch appState {
+                case .home:
+                    homeContentView
+                case .camera:
+                    CameraView(appState: $appState)
+                case .collection(let showSuccessToast):
+                    NavigationView {
+                        CollectionView(showSuccessToast: showSuccessToast, appState: $appState)
+                            .navigationBarTitleDisplayMode(.inline)
+                            .navigationBarBackButtonHidden(true)
+                            .navigationBarTitleDisplayMode(.inline)
+                            .toolbar(content: collectionToolbarContent)
                     }
+                }
             }
+            
+            // 🚀 新增：AI增强进度监控覆盖层
+            AIEnhancementProgressView()
+        }
+        .onAppear {
+            // 检查是否需要显示数据库重置提示
+            checkForDatabaseReset()
+        }
+        .alert("数据库已更新", isPresented: $showingDatabaseResetAlert) {
+            Button("确定") { }
+        } message: {
+            Text("为了支持新的AI增强功能，应用数据库已更新。之前的数据可能需要重新添加。")
         }
     }
     
@@ -177,7 +175,7 @@ struct HomeView: View {
                             Image(systemName: "sparkles")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
-                            Text("AI智能抠图")
+                            Text("AI智能抠图 + 智能增强")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             Image(systemName: "sparkles")
@@ -189,6 +187,50 @@ struct HomeView: View {
                 }
             }
             .navigationBarHidden(true)
+        }
+    }
+    
+    /// 检查数据库重置状态
+    private func checkForDatabaseReset() {
+        // 检查是否刚刚进行了数据库重置
+        let userDefaults = UserDefaults.standard
+        if userDefaults.bool(forKey: "database_was_reset") {
+            showingDatabaseResetAlert = true
+            userDefaults.set(false, forKey: "database_was_reset")
+        }
+    }
+    
+    /// 图鉴页面的工具栏内容
+    @ToolbarContentBuilder
+    private func collectionToolbarContent() -> some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            Button(action: {
+                appState = .home
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("首页")
+                        .font(.system(size: 16, weight: .medium))
+                }
+                .foregroundColor(.blue)
+            }
+        }
+        
+        ToolbarItem(placement: .principal) {
+            Text("我的图鉴")
+                .font(.headline)
+                .fontWeight(.semibold)
+        }
+        
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Button(action: {
+                appState = .camera
+            }) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.blue)
+            }
         }
     }
 }
