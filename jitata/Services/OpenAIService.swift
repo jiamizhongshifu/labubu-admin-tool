@@ -28,7 +28,7 @@ class OpenAIService: ObservableObject {
         }
         
         // 获取提示词
-        let prompt = PromptManager.shared.getEnhancementPrompt(for: category)
+        let prompt = PromptManager.shared.getDefaultPrompt()
         
         // 使用图片编辑API
         return try await editImage(image, prompt: prompt)

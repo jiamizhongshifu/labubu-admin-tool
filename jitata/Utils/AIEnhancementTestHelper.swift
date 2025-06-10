@@ -7,7 +7,7 @@ import SwiftData
 class AIEnhancementTestHelper {
     
     /// 创建测试用的ToySticker
-    static func createTestSticker(name: String = "测试手办", category: String = "手办") -> ToySticker {
+    static func createTestSticker(name: String = "测试玩具", category: String = CategoryConstants.defaultCategory) -> ToySticker {
         // 创建一个简单的测试图片
         let testImage = createTestImage()
         
@@ -61,11 +61,14 @@ class AIEnhancementTestHelper {
     
     /// 测试提示词管理器
     static func testPromptManager() -> [String: String] {
-        let categories = ["手办", "盲盒", "积木", "卡牌", "其他"]
+        let categories = CategoryConstants.allCategories
         var results: [String: String] = [:]
         
+        // 获取 PromptManager 实例
+        let promptManager = PromptManager.shared
+        
         for category in categories {
-            let prompt = PromptManager.shared.getEnhancementPrompt(for: category)
+            let prompt = promptManager.getDefaultPrompt()
             results[category] = prompt
         }
         
@@ -82,7 +85,9 @@ class AIEnhancementTestHelper {
                 // 模拟成功：创建一个稍微不同的图片作为"增强"结果
                 let enhancedImage = createEnhancedTestImage()
                 sticker.setEnhancedImage(enhancedImage)
-                sticker.enhancementPrompt = PromptManager.shared.getEnhancementPrompt(for: sticker.categoryName)
+                // 获取 PromptManager 实例
+                let promptManager = PromptManager.shared
+                sticker.enhancementPrompt = promptManager.getDefaultPrompt()
             } else {
                 // 模拟失败
                 sticker.markEnhancementFailed()
@@ -177,10 +182,10 @@ extension AIEnhancementTestHelper {
     
     /// 开发环境专用：批量创建测试贴纸
     static func createTestStickers(count: Int = 5, in context: ModelContext) {
-        let categories = ["手办", "盲盒", "积木", "卡牌", "其他"]
+        let categories = CategoryConstants.allCategories
         
         for i in 1...count {
-            let category = categories.randomElement() ?? "其他"
+            let category = categories.randomElement() ?? CategoryConstants.defaultCategory
             let sticker = createTestSticker(
                 name: "测试\(category)\(i)",
                 category: category

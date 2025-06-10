@@ -16,7 +16,7 @@ struct ImageProcessingView: View {
     @State private var processedImage: UIImage?
     @State private var isProcessing = false
     @State private var showingNameInput = false
-    @State private var selectedCategory = "手办"
+    @State private var selectedCategory = CategoryConstants.defaultCategory
     @State private var stickerName = ""
     @State private var notes = ""
     @State private var selectedStyle: ImageProcessor.StickerStyle = .withShadow
@@ -25,7 +25,7 @@ struct ImageProcessingView: View {
     @State private var isSaving = false
     @State private var shouldNavigateToCollection = false
     
-    let categories = ["手办", "盲盒", "积木", "卡牌", "其他"]
+    let categories = CategoryConstants.allCategories
     
     var body: some View {
         NavigationView {

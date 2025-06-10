@@ -19,6 +19,7 @@ struct StickerDetailView: View {
     @State private var showingDeleteAlert = false
     @State private var showingSeriesView = false
     @State private var isRetryingEnhancement = false
+    @State private var showingCustomPromptInput = false
     
     // 获取当天收集的贴纸（最新的在最左边）
     var todayStickers: [ToySticker] {
@@ -116,22 +117,84 @@ struct StickerDetailView: View {
                     }
                     .padding(.horizontal, 20)
                     
+                    // 预存储状态指示器
+                    if let storedURL = currentSticker.supabaseImageURL, !storedURL.isEmpty {
+                        HStack {
+                            if storedURL.hasPrefix("file://") {
+                                // 本地存储指示器
+                                Image(systemName: "internaldrive.fill")
+                                    .foregroundColor(.blue)
+                                    .font(.system(size: 12))
+                                Text("图片已预存储到本地")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.secondary)
+                            } else {
+                                // 云端存储指示器
+                                Image(systemName: "cloud.fill")
+                                    .foregroundColor(.green)
+                                    .font(.system(size: 12))
+                                Text("图片已预上传到云端")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(storedURL.hasPrefix("file://") ? .blue : .green)
+                                .font(.system(size: 12))
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 4)
+                    }
+                    
+                    // 图片切换按钮（仅在有增强图片时显示）
+                    if currentSticker.hasEnhancedImage {
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                currentSticker.toggleImageDisplay()
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: currentSticker.isShowingEnhancedImage ? "photo" : "sparkles")
+                                    .font(.system(size: 14, weight: .medium))
+                                Text("当前显示：\(currentSticker.currentImageTypeDescription)")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .font(.system(size: 12))
+                            }
+                            .foregroundColor(.blue)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(Color.blue.opacity(0.1))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 20)
+                                            .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                                    )
+                            )
+                        }
+                        .transition(.opacity.combined(with: .scale))
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 8)
+                    }
+                    
                     // 操作按钮区域
                     VStack(spacing: 12) {
-                        // AI增强重试按钮（仅在失败时显示）
-                        if currentSticker.currentEnhancementStatus == .failed && currentSticker.canRetryEnhancement {
+                        // AI增强按钮（未增强或可以重新增强时显示）
+                        if currentSticker.aiEnhancementStatus != .processing {
                             Button(action: {
-                                retryEnhancement()
+                                showingCustomPromptInput = true
                             }) {
                                 HStack {
-                                    if isRetryingEnhancement {
+                                    if currentSticker.aiEnhancementStatus == .processing || isRetryingEnhancement {
                                         ProgressView()
                                             .scaleEffect(0.8)
                                             .foregroundColor(.white)
                                     } else {
-                                        Image(systemName: "arrow.clockwise")
+                                        Image(systemName: currentSticker.aiEnhancementStatus == .completed ? "sparkles" : "wand.and.stars")
                                     }
-                                    Text(isRetryingEnhancement ? "重新增强中..." : "重新AI增强")
+                                    Text(getEnhancementButtonText())
                                 }
                                 .font(.headline)
                                 .foregroundColor(.white)
@@ -139,16 +202,48 @@ struct StickerDetailView: View {
                                 .padding(.vertical, 12)
                                 .background(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [Color.orange, Color.red]),
+                                        gradient: Gradient(colors: getEnhancementButtonColors()),
                                         startPoint: .leading,
                                         endPoint: .trailing
                                     )
                                 )
                                 .cornerRadius(12)
-                                .shadow(color: .orange.opacity(0.3), radius: 6, x: 0, y: 3)
+                                .shadow(color: getEnhancementButtonColors()[0].opacity(0.3), radius: 6, x: 0, y: 3)
                             }
-                            .disabled(isRetryingEnhancement)
+                            .disabled(currentSticker.aiEnhancementStatus == .processing || isRetryingEnhancement)
                             .padding(.horizontal, 20)
+                        }
+                        
+                        // 取消增强按钮（处理中时显示）
+                        if currentSticker.aiEnhancementStatus == .processing {
+                            Button(action: {
+                                cancelEnhancement()
+                            }) {
+                                HStack {
+                                    Image(systemName: "xmark.circle.fill")
+                                    Text("取消增强")
+                                }
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color.red, Color.orange]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .cornerRadius(12)
+                                .shadow(color: Color.red.opacity(0.3), radius: 6, x: 0, y: 3)
+                            }
+                            .padding(.horizontal, 20)
+                        }
+                        
+                        // AI增强进度视图（处理中时显示）
+                        if currentSticker.aiEnhancementStatus == .processing {
+                            AIEnhancementProgressView(isPresented: .constant(true), sticker: currentSticker)
+                                .padding(.horizontal, 20)
                         }
                         
                         // 查看系列按钮
@@ -206,27 +301,76 @@ struct StickerDetailView: View {
         .sheet(isPresented: $showingSeriesView) {
             SeriesInfoView(categoryName: currentSticker.categoryName)
         }
-    }
-    
-    // MARK: - 私有方法
-    
-    /// 重试AI增强
-    private func retryEnhancement() {
-        Task {
-            isRetryingEnhancement = true
-            let success = await ImageEnhancementService.shared.retryEnhancement(currentSticker, modelContext: modelContext)
-            await MainActor.run {
-                isRetryingEnhancement = false
-                if success {
-                    // 增强成功，可以显示成功提示
-                } else {
-                    // 增强失败，可以显示失败提示
-                }
+        .sheet(isPresented: $showingCustomPromptInput) {
+            CustomPromptInputView(isPresented: $showingCustomPromptInput) { prompt, model in
+                triggerEnhancement(with: prompt, using: model)
             }
         }
     }
     
-
+    // MARK: - 私有方法
+    
+    /// 触发AI增强
+    private func triggerEnhancement(with prompt: String, using model: AIModel) {
+        Task {
+            isRetryingEnhancement = true
+            
+            // 设置状态为处理中
+            currentSticker.aiEnhancementStatus = .processing
+            currentSticker.aiEnhancementMessage = "准备增强..."
+            currentSticker.aiEnhancementProgress = 0.0
+            
+            _ = await ImageEnhancementService.shared.enhanceImage(for: currentSticker, customPrompt: prompt, model: model)
+            await MainActor.run {
+                isRetryingEnhancement = false
+            }
+        }
+    }
+    
+    /// 获取增强按钮文字
+    private func getEnhancementButtonText() -> String {
+        if isRetryingEnhancement {
+            return "AI增强中..."
+        }
+        
+        switch currentSticker.aiEnhancementStatus {
+        case .pending:
+            return "AI增强"
+        case .processing:
+            return "增强中..."
+        case .completed:
+            return "重新增强"
+        case .failed:
+            return "重试增强"
+        }
+    }
+    
+    /// 获取增强按钮颜色
+    private func getEnhancementButtonColors() -> [Color] {
+        switch currentSticker.aiEnhancementStatus {
+        case .pending:
+            return [Color.blue, Color.purple]
+        case .processing:
+            return [Color.gray, Color.gray.opacity(0.8)]
+        case .completed:
+            return [Color.green, Color.teal]
+        case .failed:
+            return [Color.orange, Color.red]
+        }
+    }
+    
+    /// 取消AI增强
+    private func cancelEnhancement() {
+        ImageEnhancementService.shared.cancelEnhancement(for: currentSticker)
+        isRetryingEnhancement = false
+    }
+    
+    /// 重试AI增强（保留原有方法以兼容）
+    private func retryEnhancement() {
+        // 使用默认提示词和模型重试
+        let defaultPrompt = PromptManager.shared.getDefaultPrompt()
+        triggerEnhancement(with: defaultPrompt, using: .fluxKontext)
+    }
     
     // 格式化日期
     private func formatDate(_ date: Date) -> String {

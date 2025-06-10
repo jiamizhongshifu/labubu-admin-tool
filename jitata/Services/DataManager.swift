@@ -85,39 +85,16 @@ class DataManager: ObservableObject {
             try context.save()
             toyStickers.insert(sticker, at: 0) // 插入到开头
             
-            // 🚀 自动触发AI增强
+            print("📌 贴纸已保存到本地数据库")
+            
+            // 🚀 异步预上传图片到Supabase
             Task {
-                await triggerAutoEnhancement(for: sticker, context: context)
+                await preUploadImageToSupabase(for: sticker)
             }
+            
+            print("📌 贴纸已保存，可在详情页手动触发AI增强")
         } catch {
-            print("保存贴纸失败: \(error)")
-        }
-    }
-    
-    /// 自动触发AI增强
-    private func triggerAutoEnhancement(for sticker: ToySticker, context: ModelContext) async {
-        print("🔍 检查AI增强触发条件...")
-        print("   - 贴纸名称: \(sticker.name)")
-        print("   - 贴纸状态: \(sticker.currentEnhancementStatus)")
-        
-        // 检查API是否已配置
-        guard ImageEnhancementService.shared.isAPIConfigured else {
-            print("❌ API未配置，跳过AI增强")
-            return
-        }
-        
-        print("✅ API已配置，开始AI增强...")
-        
-        let success = await ImageEnhancementService.shared.enhanceSticker(sticker, modelContext: context)
-        
-        print("🎯 AI增强结果: \(success ? "成功" : "失败")")
-        
-        if success {
-            // 刷新数据
-            await MainActor.run {
-                print("🔄 刷新数据...")
-                loadToyStickers()
-            }
+            print("❌ 保存贴纸失败: \(error)")
         }
     }
     
@@ -222,6 +199,117 @@ class DataManager: ObservableObject {
             sticker.name.localizedCaseInsensitiveContains(keyword) ||
             sticker.categoryName.localizedCaseInsensitiveContains(keyword) ||
             sticker.notes.localizedCaseInsensitiveContains(keyword)
+        }
+    }
+    
+    // MARK: - Supabase预上传功能
+    
+    /// 预上传图片到存储
+    /// 在贴纸保存后立即执行，为后续AI增强做准备
+    /// 优先使用Supabase，配置无效时使用本地存储
+    private func preUploadImageToSupabase(for sticker: ToySticker) async {
+        print("📝 [预上传] 🚀 开始为贴纸 \(sticker.name) 预上传图片")
+        
+        // 检查是否已经有存储URL
+        if let existingURL = sticker.supabaseImageURL, !existingURL.isEmpty {
+            print("📝 [预上传] ✅ 贴纸已有存储URL，跳过上传")
+            return
+        }
+        
+        // 检查Supabase配置是否有效
+        let isSupabaseConfigValid = {
+            guard let supabaseURL = APIConfig.supabaseURL,
+                  let supabaseKey = APIConfig.supabaseServiceRoleKey,
+                  !supabaseURL.isEmpty && !supabaseKey.isEmpty,
+                  !supabaseURL.contains("your_supabase_project_url_here"),
+                  !supabaseKey.contains("your_supabase_service_role_key_here") else {
+                return false
+            }
+            return true
+        }()
+        
+        if !isSupabaseConfigValid {
+            print("📝 [预上传] ⚠️ Supabase配置无效，使用本地存储方案")
+            await useLocalStorageForPreUpload(for: sticker)
+            return
+        }
+        
+        // 获取处理后的图片数据
+        guard let processedImage = sticker.processedImage else {
+            print("📝 [预上传] ❌ 无法获取处理后的图片")
+            return
+        }
+        
+        // 压缩图片以优化上传
+        guard let compressedData = SupabaseStorageService.shared.compressImageForUpload(processedImage, maxSizeKB: 800) else {
+            print("📝 [预上传] ❌ 图片压缩失败")
+            return
+        }
+        
+        print("📝 [预上传] 📦 图片压缩完成，大小: \(compressedData.count) 字节")
+        
+        do {
+            // 上传到Supabase
+            let supabaseURL = try await SupabaseStorageService.shared.uploadImage(
+                compressedData,
+                stickerId: sticker.id.uuidString
+            )
+            
+            // 更新贴纸的Supabase URL
+            await MainActor.run {
+                sticker.supabaseImageURL = supabaseURL
+                updateToySticker(sticker)
+                print("📝 [预上传] ✅ 预上传成功，URL已保存: \(supabaseURL)")
+            }
+            
+        } catch {
+            print("📝 [预上传] ❌ Supabase预上传失败: \(error.localizedDescription)")
+            print("📝 [预上传] 🔄 降级到本地存储方案")
+            // Supabase失败时降级到本地存储
+            await useLocalStorageForPreUpload(for: sticker)
+        }
+    }
+    
+    /// 本地存储预上传方案
+    /// 当Supabase不可用时的备选方案
+    private func useLocalStorageForPreUpload(for sticker: ToySticker) async {
+        print("📝 [本地存储] 🚀 开始本地存储预处理")
+        
+        // 获取处理后的图片数据
+        guard let processedImage = sticker.processedImage else {
+            print("📝 [本地存储] ❌ 无法获取处理后的图片")
+            return
+        }
+        
+        // 压缩图片以优化后续处理
+        guard let compressedData = SupabaseStorageService.shared.compressImageForUpload(processedImage, maxSizeKB: 800) else {
+            print("📝 [本地存储] ❌ 图片压缩失败")
+            return
+        }
+        
+        print("📝 [本地存储] 📦 图片压缩完成，大小: \(compressedData.count) 字节")
+        
+        do {
+            // 保存到应用文档目录
+            let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let fileName = "sticker_\(sticker.id.uuidString)_\(Date().timeIntervalSince1970).png"
+            let fileURL = documentsPath.appendingPathComponent(fileName)
+            
+            try compressedData.write(to: fileURL)
+            
+            // 生成本地文件URL
+            let localURL = fileURL.absoluteString
+            
+            // 更新贴纸的存储URL（使用本地路径）
+            await MainActor.run {
+                sticker.supabaseImageURL = localURL
+                updateToySticker(sticker)
+                print("📝 [本地存储] ✅ 本地存储成功，路径已保存: \(fileName)")
+                print("📝 [本地存储] 💡 AI增强时将使用本地文件，速度更快")
+            }
+            
+        } catch {
+            print("📝 [本地存储] ❌ 本地存储失败: \(error.localizedDescription)")
         }
     }
     

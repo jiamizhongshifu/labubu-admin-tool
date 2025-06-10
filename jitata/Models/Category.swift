@@ -24,11 +24,9 @@ final class Category: Identifiable {
 }
 
 extension Category {
-    static let defaultCategories: [Category] = [
-        Category(name: "手办", iconName: "figure.stand"),
-        Category(name: "盲盒", iconName: "cube.box"),
-        Category(name: "积木", iconName: "building.2"),
-        Category(name: "卡牌", iconName: "rectangle.stack"),
-        Category(name: "其他", iconName: "questionmark.circle")
-    ]
+    static let defaultCategories: [Category] = {
+        return CategoryConstants.allCategories.map { categoryName in
+            Category(name: categoryName, iconName: CategoryConstants.iconName(for: categoryName))
+        }
+    }()
 } 

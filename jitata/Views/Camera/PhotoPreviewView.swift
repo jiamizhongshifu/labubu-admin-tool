@@ -230,9 +230,9 @@ struct PhotoPreviewView: View {
                 originalImage: originalImage,
                 processedImage: finalImage,
                 initialName: .constant(""),
-                selectedCategory: .constant("手办"),
+                selectedCategory: .constant(CategoryConstants.defaultCategory),
                 notes: .constant(""),
-                categories: ["手办", "盲盒", "积木", "卡牌", "其他"]
+                categories: CategoryConstants.allCategories
             ) { name, category, notes in
                 // 保存贴纸
                 let squareImage = ImageProcessor.shared.cropToSquareAspectRatio(finalImage)
@@ -328,12 +328,12 @@ struct StickerConfirmationView: View {
     let onCancel: () -> Void
     
     @State private var stickerName = ""
-    @State private var selectedCategory = "手办"
+    @State private var selectedCategory = CategoryConstants.defaultCategory
     @State private var notes = ""
     @State private var isKeyboardVisible = false
     @State private var shouldNavigateToCollection = false
     
-    let categories = ["手办", "盲盒", "积木", "卡牌", "其他"]
+    let categories = CategoryConstants.allCategories
     
     var body: some View {
         ZStack {

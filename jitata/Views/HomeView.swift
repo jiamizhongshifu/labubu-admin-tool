@@ -38,9 +38,6 @@ struct HomeView: View {
                     }
                 }
             }
-            
-            // 🚀 新增：AI增强进度监控覆盖层
-            AIEnhancementProgressView()
         }
         .onAppear {
             // 检查是否需要显示数据库重置提示
