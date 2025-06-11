@@ -255,4 +255,170 @@ Jitata致力于为潮玩爱好者提供最简单、最智能的收集体验。�
 - `image`: PNG格式图片数据（必需）
 - `prompt`: 分类特定的增强提示词（必需）
 - `size`: "1024x1024" - 标准尺寸
-- `
+
+# jitata - iOS 贴纸相机应用
+
+## 项目概述
+jitata 是一个功能丰富的 iOS 贴纸相机应用，支持拍照、AI 图像增强、视频生成等功能。
+
+## 最新更新
+
+### 📸 拍摄页面取景框优化 (2024-12-06)
+
+**新增功能：**
+1. **参考图样式取景框设计**
+   - 完全按照参考图设计，去除外边矩形边框
+   - 只保留4个断开的圆角装饰，更加简洁现代
+   - 带圆角的L型角标，提供专业的拍摄体验
+   - 优化的视觉层次和对比度
+
+2. **点击对焦功能**
+   - 点击屏幕任意位置，取景框会移动到点击位置
+   - 自动对焦到点击指向的物体
+   - 流畅的动画效果，提供即时的视觉反馈
+   - 触觉反馈增强用户体验
+
+**技术实现：**
+- 修改了 `CameraView.swift` 中的取景框布局和交互逻辑
+- 创建了 `ReferenceCornerBracket` 组件，完全还原参考图样式
+- 优化了 `CameraPreviewView.swift` 支持外部点击处理
+- 实现了坐标转换和安全范围限制
+- 集成了 `HapticFeedbackManager` 提供触觉反馈
+
+**设计细节：**
+- 取景框尺寸：120x120 像素
+- 角标线长：20 像素，线宽：2 像素
+- 圆角半径：4 像素，使用 `addQuadCurve` 实现平滑圆角
+- 动画效果：0.3秒缩放动画，透明度变化
+
+**用户体验改进：**
+- 更直观的对焦操作
+- 高度还原参考图的专业相机界面设计
+- 即时的触觉和视觉反馈
+- 流畅的动画过渡效果
+
+### 🎯 触觉反馈系统 (之前更新)
+
+**已实现功能：**
+- 统一的轻触反馈系统
+- 覆盖全应用38个交互点
+- 10个主要组件的完整集成
+- 提升用户交互质量
+
+## 核心功能
+
+### 📷 相机功能
+- 高质量照片拍摄
+- 实时相机预览
+- 点击对焦和自动对焦
+- 现代化取景框界面
+- 照片库访问
+
+### 🎨 AI 图像处理
+- AI 图像增强
+- 背景移除（抠图）
+- 图像质量优化
+- 实时处理进度显示
+
+### 🎬 视频生成
+- AI 视频生成
+- 多种提示词模板
+- 视频预览和管理
+- Live Photo 导出
+
+### 🖼️ 贴纸管理
+- 贴纸收藏和分类
+- 详细视图和编辑
+- 系列化管理
+- 云端同步
+
+## 技术架构
+
+### 核心组件
+- **CameraView**: 相机拍摄界面，支持点击对焦
+- **CollectionView**: 贴纸收藏管理
+- **StickerDetailView**: 贴纸详情和编辑
+- **VideoManagementView**: 视频生成和管理
+- **HapticFeedbackManager**: 统一触觉反馈
+
+### 服务层
+- **ImageEnhancementService**: AI 图像增强服务
+- **KlingAPIService**: 视频生成 API 服务
+- **SupabaseService**: 云端存储服务
+
+### 技术栈
+- **开发语言**: Swift 5.0+
+- **UI 框架**: SwiftUI
+- **最低版本**: iOS 18.4+
+- **相机框架**: AVFoundation
+- **图像处理**: Core Image, Vision
+- **网络请求**: URLSession
+- **数据存储**: UserDefaults, Supabase
+
+## 开发环境
+
+### 要求
+- Xcode 16.0+
+- iOS 18.4+ 模拟器或设备
+- Swift 5.0+
+
+### 编译和运行
+```bash
+# 克隆项目
+git clone [repository-url]
+
+# 打开项目
+open jitata.xcodeproj
+
+# 选择目标设备并运行
+# 支持 iPhone 和 iPad
+```
+
+### 环境配置
+项目需要配置以下环境变量（在 `.env` 文件中）：
+```
+TUZI_API_KEY=your_api_key
+TUZI_API_BASE=your_api_base_url
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+SUPABASE_STORAGE_BUCKET=jitata-images
+```
+
+## 项目结构
+
+```
+jitata/
+├── Views/
+│   ├── Camera/
+│   │   ├── CameraView.swift          # 主相机界面
+│   │   ├── CameraPreviewView.swift   # 相机预览组件
+│   │   ├── PhotoPreviewView.swift    # 照片预览
+│   │   └── ImageCropView.swift       # 图像裁剪
+│   ├── Collection/
+│   │   ├── CollectionView.swift      # 贴纸收藏
+│   │   └── StickerDetailView.swift   # 贴纸详情
+│   ├── Components/
+│   │   ├── VideoManagementView.swift # 视频管理
+│   │   ├── StickerCard.swift         # 贴纸卡片
+│   │   └── VideoGenerationButton.swift
+│   └── HomeView.swift                # 主页面
+├── Services/
+│   ├── ImageEnhancementService.swift # AI 增强服务
+│   ├── KlingAPIService.swift         # 视频生成服务
+│   └── SupabaseService.swift         # 云端存储
+├── Utils/
+│   └── HapticFeedbackManager.swift   # 触觉反馈管理
+├── Models/
+│   └── ToySticker.swift              # 贴纸数据模型
+└── Assets.xcassets                   # 应用资源
+```
+
+## 许可证
+[许可证信息]
+
+## 贡献
+欢迎提交 Issue 和 Pull Request 来改进项目。
+
+---
+*最后更新: 2024-12-06*

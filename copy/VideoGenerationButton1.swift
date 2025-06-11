@@ -45,7 +45,6 @@ struct VideoGenerationButton: View {
     
     private var mainButton: some View {
         Button(action: {
-            HapticFeedbackManager.shared.lightTap()
             if sticker.videoGenerationStatus == .processing {
                 showCancelConfirmation = true
             } else {
@@ -107,7 +106,6 @@ struct VideoGenerationButton: View {
                 ], spacing: 12) {
                     ForEach(videoPrompts, id: \.self) { prompt in
                         Button(action: {
-                            HapticFeedbackManager.shared.lightTap()
                             selectedPrompt = prompt
                             showPromptInput = false
                             startVideoGeneration()

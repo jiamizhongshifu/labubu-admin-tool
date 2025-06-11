@@ -11,10 +11,12 @@ import UIKit
 
 struct CameraPreviewView: UIViewRepresentable {
     @ObservedObject var cameraManager: CameraManager
+    var onTap: ((CGPoint) -> Void)?
     
     func makeUIView(context: Context) -> UIView {
         let view = CameraPreviewUIView()
         view.cameraManager = cameraManager
+        view.onTap = onTap
         
         if let previewLayer = cameraManager.previewLayer {
             previewLayer.frame = view.bounds
@@ -29,12 +31,17 @@ struct CameraPreviewView: UIViewRepresentable {
         if let previewLayer = cameraManager.previewLayer {
             previewLayer.frame = uiView.bounds
         }
+        
+        if let previewView = uiView as? CameraPreviewUIView {
+            previewView.onTap = onTap
+        }
     }
 }
 
 // MARK: - 自定义UIView支持点击对焦
 class CameraPreviewUIView: UIView {
     var cameraManager: CameraManager?
+    var onTap: ((CGPoint) -> Void)?
     
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -53,6 +60,11 @@ class CameraPreviewUIView: UIView {
     
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
         let location = gesture.location(in: self)
+        
+        // 调用外部传入的点击处理函数
+        onTap?(location)
+        
+        // 同时调用相机对焦
         cameraManager?.focusAt(point: location, in: self)
     }
 }

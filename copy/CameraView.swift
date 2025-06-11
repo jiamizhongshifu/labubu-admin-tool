@@ -18,10 +18,6 @@ struct CameraView: View {
     @State private var alertMessage = ""
     @State private var showingPhotoPreview = false
     
-    // 取景框相关状态
-    @State private var focusPoint: CGPoint = CGPoint(x: 0.5, y: 0.5) // 相对坐标 (0-1)
-    @State private var showFocusAnimation = false
-    
     // 日期格式化器
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
@@ -34,10 +30,8 @@ struct CameraView: View {
         ZStack {
             // 相机预览背景
             if cameraManager.hasPermission && cameraManager.isSessionRunning {
-                CameraPreviewView(cameraManager: cameraManager) { location in
-                    handleTapToFocus(at: location)
-                }
-                .ignoresSafeArea()
+                CameraPreviewView(cameraManager: cameraManager)
+                    .ignoresSafeArea()
             } else {
                 // 无权限或相机未启动时的黑色背景
                 Color.black
@@ -51,7 +45,6 @@ struct CameraView: View {
                 HStack {
                     // 返回按钮
                     Button(action: {
-                        HapticFeedbackManager.shared.lightTap()
                         cameraManager.stopSession()
                         appState = .home
                     }) {
@@ -84,16 +77,42 @@ struct CameraView: View {
                 
                 Spacer()
                 
-                // 中间区域 - 动态取景框
-                GeometryReader { geometry in
-                    ZStack {
-                        // 动态取景框
-                        ModernViewfinder(
-                            focusPoint: focusPoint,
-                            showAnimation: showFocusAnimation,
-                            screenSize: geometry.size
-                        )
-                        .allowsHitTesting(false) // 不拦截点击事件
+                // 中间区域 - 取景框
+                ZStack {
+                    // 取景框
+                    VStack {
+                        Spacer()
+                        
+                        ZStack {
+                            // 取景框背景
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.white, lineWidth: 2)
+                                .frame(width: 280, height: 280)
+                            
+                            // 四个角的装饰
+                            VStack {
+                                HStack {
+                                    CornerBracket(position: .topLeft)
+                                    Spacer()
+                                    CornerBracket(position: .topRight)
+                                }
+                                Spacer()
+                                HStack {
+                                    CornerBracket(position: .bottomLeft)
+                                    Spacer()
+                                    CornerBracket(position: .bottomRight)
+                                }
+                            }
+                            .frame(width: 280, height: 280)
+                            
+                            // 中心提示文字
+                            Text("将物体放置在框内")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.7))
+                                .padding(.top, 320)
+                        }
+                        
+                        Spacer()
                     }
                 }
                 
@@ -109,7 +128,6 @@ struct CameraView: View {
                     
                     // 中间拍摄按钮
                     Button(action: {
-                        HapticFeedbackManager.shared.lightTap()
                         capturePhoto()
                     }) {
                         ZStack {
@@ -131,7 +149,6 @@ struct CameraView: View {
                     
                     // 右侧相册入口
                     Button(action: {
-                        HapticFeedbackManager.shared.lightTap()
                         showingImagePicker = true
                     }) {
                         ZStack {
@@ -168,7 +185,6 @@ struct CameraView: View {
                         .padding(.horizontal, 40)
                     
                     Button("去设置") {
-                        HapticFeedbackManager.shared.lightTap()
                         if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
                             UIApplication.shared.open(settingsUrl)
                         }
@@ -271,137 +287,87 @@ struct CameraView: View {
         
         return image
     }
-    
-    // MARK: - 点击对焦处理
-    private func handleTapToFocus(at location: CGPoint) {
-        HapticFeedbackManager.shared.lightTap()
-        
-        // 获取屏幕尺寸
-        let screenSize = UIScreen.main.bounds.size
-        
-        // 计算相对坐标 (0-1)，限制在安全范围内
-        let relativeX = max(0.1, min(0.9, location.x / screenSize.width))
-        let relativeY = max(0.1, min(0.9, location.y / screenSize.height))
-        
-        // 更新焦点位置
-        withAnimation(.easeInOut(duration: 0.3)) {
-            focusPoint = CGPoint(x: relativeX, y: relativeY)
-        }
-        
-        // 显示对焦动画
-        showFocusAnimation = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                showFocusAnimation = false
-            }
-        }
-        
-        print("🎯 点击对焦: 屏幕坐标(\(location.x), \(location.y)) -> 相对坐标(\(relativeX), \(relativeY))")
-    }
 }
 
-// MARK: - 现代化取景框组件
-struct ModernViewfinder: View {
-    let focusPoint: CGPoint
-    let showAnimation: Bool
-    let screenSize: CGSize
+// MARK: - 取景框角落装饰组件
+struct CornerBracket: View {
+    enum Position {
+        case topLeft, topRight, bottomLeft, bottomRight
+    }
     
-    private let viewfinderSize: CGFloat = 120
+    let position: Position
     
     var body: some View {
         ZStack {
-            // 计算取景框在屏幕上的实际位置
-            let centerX = focusPoint.x * screenSize.width
-            let centerY = focusPoint.y * screenSize.height
-            
-            // 只显示四个断开的圆角，不要外边框
-            ForEach(0..<4, id: \.self) { index in
-                ReferenceCornerBracket(corner: Corner.allCases[index])
-                    .position(
-                        x: centerX + cornerOffset(for: Corner.allCases[index]).x,
-                        y: centerY + cornerOffset(for: Corner.allCases[index]).y
-                    )
-                    .opacity(showAnimation ? 1.0 : 0.8)
-                    .scaleEffect(showAnimation ? 1.1 : 1.0)
-                    .animation(.easeInOut(duration: 0.3), value: showAnimation)
-            }
-        }
-    }
-    
-    private func cornerOffset(for corner: Corner) -> CGPoint {
-        let offset = viewfinderSize / 2
-        switch corner {
-        case .topLeft:
-            return CGPoint(x: -offset, y: -offset)
-        case .topRight:
-            return CGPoint(x: offset, y: -offset)
-        case .bottomLeft:
-            return CGPoint(x: -offset, y: offset)
-        case .bottomRight:
-            return CGPoint(x: offset, y: offset)
-        }
-    }
-}
-
-// MARK: - 参考图样式角标组件
-struct ReferenceCornerBracket: View {
-    let corner: Corner
-    
-    private let lineLength: CGFloat = 30
-    private let lineWidth: CGFloat = 5
-    private let cornerRadius: CGFloat = 16
-    
-    var body: some View {
-        ZStack {
-            switch corner {
+            switch position {
             case .topLeft:
-                Path { path in
-                    // 垂直线（带圆角）
-                    path.move(to: CGPoint(x: 0, y: lineLength))
-                    path.addLine(to: CGPoint(x: 0, y: cornerRadius))
-                    path.addQuadCurve(to: CGPoint(x: cornerRadius, y: 0), control: CGPoint(x: 0, y: 0))
-                    path.addLine(to: CGPoint(x: lineLength, y: 0))
+                VStack(spacing: 0) {
+                    HStack(spacing: 0) {
+                        Rectangle()
+                            .fill(Color.white)
+                            .frame(width: 20, height: 3)
+                        Spacer()
+                    }
+                    HStack(spacing: 0) {
+                        Rectangle()
+                            .fill(Color.white)
+                            .frame(width: 3, height: 20)
+                        Spacer()
+                    }
+                    Spacer()
                 }
-                .stroke(Color.white, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                
             case .topRight:
-                Path { path in
-                    // 水平线到垂直线（带圆角）
-                    path.move(to: CGPoint(x: 0, y: 0))
-                    path.addLine(to: CGPoint(x: lineLength - cornerRadius, y: 0))
-                    path.addQuadCurve(to: CGPoint(x: lineLength, y: cornerRadius), control: CGPoint(x: lineLength, y: 0))
-                    path.addLine(to: CGPoint(x: lineLength, y: lineLength))
+                VStack(spacing: 0) {
+                    HStack(spacing: 0) {
+                        Spacer()
+                        Rectangle()
+                            .fill(Color.white)
+                            .frame(width: 20, height: 3)
+                    }
+                    HStack(spacing: 0) {
+                        Spacer()
+                        Rectangle()
+                            .fill(Color.white)
+                            .frame(width: 3, height: 20)
+                    }
+                    Spacer()
                 }
-                .stroke(Color.white, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                
             case .bottomLeft:
-                Path { path in
-                    // 垂直线到水平线（带圆角）
-                    path.move(to: CGPoint(x: 0, y: 0))
-                    path.addLine(to: CGPoint(x: 0, y: lineLength - cornerRadius))
-                    path.addQuadCurve(to: CGPoint(x: cornerRadius, y: lineLength), control: CGPoint(x: 0, y: lineLength))
-                    path.addLine(to: CGPoint(x: lineLength, y: lineLength))
+                VStack(spacing: 0) {
+                    Spacer()
+                    HStack(spacing: 0) {
+                        Rectangle()
+                            .fill(Color.white)
+                            .frame(width: 3, height: 20)
+                        Spacer()
+                    }
+                    HStack(spacing: 0) {
+                        Rectangle()
+                            .fill(Color.white)
+                            .frame(width: 20, height: 3)
+                        Spacer()
+                    }
                 }
-                .stroke(Color.white, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                
             case .bottomRight:
-                Path { path in
-                    // 水平线到垂直线（带圆角）
-                    path.move(to: CGPoint(x: 0, y: lineLength))
-                    path.addLine(to: CGPoint(x: lineLength - cornerRadius, y: lineLength))
-                    path.addQuadCurve(to: CGPoint(x: lineLength, y: lineLength - cornerRadius), control: CGPoint(x: lineLength, y: lineLength))
-                    path.addLine(to: CGPoint(x: lineLength, y: 0))
+                VStack(spacing: 0) {
+                    Spacer()
+                    HStack(spacing: 0) {
+                        Spacer()
+                        Rectangle()
+                            .fill(Color.white)
+                            .frame(width: 3, height: 20)
+                    }
+                    HStack(spacing: 0) {
+                        Spacer()
+                        Rectangle()
+                            .fill(Color.white)
+                            .frame(width: 20, height: 3)
+                    }
                 }
-                .stroke(Color.white, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
             }
         }
-        .frame(width: lineLength, height: lineLength)
+        .frame(width: 23, height: 23)
     }
-}
-
-// MARK: - 角落枚举
-enum Corner: CaseIterable {
-    case topLeft, topRight, bottomLeft, bottomRight
 }
 
 

@@ -53,7 +53,8 @@ struct CollectionView: View {
                 
                 if isFromLeftEdge && isRightSwipe && isHorizontalSwipe {
                     // 添加触觉反馈
-                    HapticFeedbackManager.shared.lightTap()
+                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                    impactFeedback.impactOccurred()
                     
                     // 侧滑返回到首页
                     withAnimation(.easeInOut(duration: 0.3)) {
@@ -123,12 +124,10 @@ struct CollectionView: View {
                                             )
                                             .onTapGesture {
                                                 if editingStickerId == nil {
-                                                    HapticFeedbackManager.shared.lightTap()
                                                     self.showingStickerDetail = sticker
                                                 }
                                             }
                                             .onLongPressGesture {
-                                                HapticFeedbackManager.shared.lightTap()
                                                 if editingStickerId == sticker.id {
                                                     editingStickerId = nil
                                                 } else {
@@ -179,55 +178,33 @@ struct CollectionView: View {
                 HStack {
                     Spacer()
                     Button(action: {
-                        HapticFeedbackManager.shared.lightTap()
                         appState = .camera
                     }) {
-                        // 相机图标
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 28, weight: .medium))
-                            .foregroundColor(.white)
-                            .frame(width: 64, height: 64)
-                            .background(
-                                // 毛玻璃背景效果 - 与对话气泡一致
-                                ZStack {
-                                    // 基础毛玻璃层
-                                    Circle()
-                                        .fill(.ultraThinMaterial)
-                                        .opacity(0.85)
-                                    
-                                    // 渐变色彩层
-                                    Circle()
-                                        .fill(
-                                            LinearGradient(
-                                                colors: [
-                                                    Color.pink.opacity(0.3),
-                                                    Color.yellow.opacity(0.2),
-                                                    Color.green.opacity(0.2),
-                                                    Color.blue.opacity(0.3)
-                                                ],
-                                                startPoint: .topLeading,
-                                                endPoint: .bottomTrailing
-                                            )
-                                        )
-                                    
-                                    // 边缘发光效果
-                                    Circle()
-                                        .stroke(
-                                            LinearGradient(
-                                                colors: [
-                                                    Color.white.opacity(0.6),
-                                                    Color.white.opacity(0.2),
-                                                    Color.clear
-                                                ],
-                                                startPoint: .topLeading,
-                                                endPoint: .bottomTrailing
-                                            ),
-                                            lineWidth: 1
-                                        )
-                                }
-                            )
-                            .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
-                            .shadow(color: .white.opacity(0.1), radius: 5, x: 0, y: -2)
+                        ZStack {
+                            // 彩色渐变背景
+                            Circle()
+                                .fill(
+                                    AngularGradient(
+                                        gradient: Gradient(colors: [
+                                            .red, .orange, .yellow, .green, 
+                                            .blue, .purple, .pink, .red
+                                        ]),
+                                        center: .center
+                                    )
+                                )
+                                .frame(width: 84, height: 84)
+                            
+                            // 内部白色圆圈
+                            Circle()
+                                .fill(Color.white)
+                                .frame(width: 70, height: 70)
+                            
+                            // 相机图标
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 34, weight: .semibold))
+                                .foregroundColor(.black)
+                        }
+                        .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
                     }
                     .scaleEffect(editingStickerId != nil ? 0.8 : 1.0) // 编辑模式下缩小
                     .opacity(editingStickerId != nil ? 0.6 : 1.0) // 编辑模式下半透明
@@ -384,10 +361,7 @@ struct SimpleStickerCard: View {
                 VStack {
                     HStack {
                         Spacer()
-                        Button(action: {
-                            HapticFeedbackManager.shared.lightTap()
-                            onDelete()
-                        }) {
+                        Button(action: onDelete) {
                             Image(systemName: "minus.circle.fill")
                                 .font(.system(size: 24))
                                 .foregroundColor(.red)

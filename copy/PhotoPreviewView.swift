@@ -104,7 +104,6 @@ struct PhotoPreviewView: View {
                     // 重拍按钮
                     VStack(spacing: 8) {
                         Button(action: {
-                            HapticFeedbackManager.shared.lightTap()
                             onCancel()
                         }) {
                             ZStack {
@@ -129,7 +128,6 @@ struct PhotoPreviewView: View {
                     VStack(spacing: 8) {
                         Button(action: { 
                             if processedImage != nil {
-                                HapticFeedbackManager.shared.lightTap()
                                 showingConfirmation = true
                             }
                         }) {
@@ -155,10 +153,7 @@ struct PhotoPreviewView: View {
                     
                     // 取消按钮
                     VStack(spacing: 8) {
-                        Button(action: { 
-                            HapticFeedbackManager.shared.lightTap()
-                            onCancel() 
-                        }) {
+                        Button(action: { onCancel() }) {
                             ZStack {
                                 Circle()
                                     .fill(Color.black.opacity(0.6))
@@ -389,10 +384,7 @@ struct StickerConfirmationView: View {
                     // 底部按钮 - 同一行布局
                     HStack(spacing: 16) {
                         // 取消按钮 - 简洁样式
-                        Button(action: {
-                            HapticFeedbackManager.shared.lightTap()
-                            onCancel()
-                        }) {
+                        Button(action: onCancel) {
                             Text("取消")
                                 .font(.headline)
                                 .foregroundColor(.black)
@@ -404,7 +396,6 @@ struct StickerConfirmationView: View {
                         
                         // 确认保存按钮
                         Button(action: {
-                            HapticFeedbackManager.shared.lightTap()
                             let finalName = stickerName.isEmpty ? "未命名潮玩" : stickerName
                             onConfirm(finalName, selectedCategory, "")
                         }) {

@@ -61,7 +61,6 @@ struct StickerDetailView: View {
                                     )
                                     .id(index) // 为每个缩略图添加ID
                                     .onTapGesture {
-                                        HapticFeedbackManager.shared.lightTap()
                                         withAnimation(.easeInOut(duration: 0.3)) {
                                             selectedStickerIndex = index
                                         }
@@ -123,7 +122,6 @@ struct StickerDetailView: View {
                             
                             // 简化的查看系列按钮
                             Button(action: {
-                                HapticFeedbackManager.shared.lightTap()
                                 showingSeriesView = true
                             }) {
                                 HStack(spacing: 4) {
@@ -188,7 +186,6 @@ struct StickerDetailView: View {
                     // 图片切换按钮（仅在有增强图片时显示）
                     if currentSticker.hasEnhancedImage {
                         Button(action: {
-                            HapticFeedbackManager.shared.lightTap()
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 currentSticker.toggleImageDisplay()
                             }
@@ -224,7 +221,6 @@ struct StickerDetailView: View {
                         // AI增强按钮（未增强或可以重新增强时显示）
                         if currentSticker.aiEnhancementStatus != .processing {
                             Button(action: {
-                                HapticFeedbackManager.shared.lightTap()
                                 showingAspectRatioSelection = true
                             }) {
                                 HStack {
@@ -280,7 +276,6 @@ struct StickerDetailView: View {
                                 
                                 // 取消增强按钮
                                 Button(action: {
-                                    HapticFeedbackManager.shared.lightTap()
                                     cancelEnhancement()
                                 }) {
                                     HStack {

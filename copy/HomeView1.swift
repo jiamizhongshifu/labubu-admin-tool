@@ -163,7 +163,6 @@ struct HomeView: View {
         HStack {
             // 左上角：用户头像
             Button(action: {
-                HapticFeedbackManager.shared.lightTap()
                 // 暂无点击事件
             }) {
                 Image("UserAvatar")
@@ -187,7 +186,6 @@ struct HomeView: View {
                 // 🎯 壁纸设置按钮（仅在有用户视频时显示）
                 if !videos.isEmpty {
                     Button(action: {
-                        HapticFeedbackManager.shared.lightTap()
                         showingWallpaperOptions = true
                     }) {
                         Image(systemName: "photo.on.rectangle.angled")
@@ -199,7 +197,6 @@ struct HomeView: View {
                 
                 // 通知图标
                 Button(action: {
-                    HapticFeedbackManager.shared.lightTap()
                     // 暂无点击事件
                 }) {
                     Image(systemName: "bell.fill")
@@ -210,7 +207,6 @@ struct HomeView: View {
                 
                 // 菜单图标
                 Button(action: {
-                    HapticFeedbackManager.shared.lightTap()
                     // 暂无点击事件
                 }) {
                     Image(systemName: "ellipsis.circle.fill")
@@ -608,10 +604,7 @@ struct NavigationBarItem: View {
     @State private var isPressed = false
     
     var body: some View {
-        Button(action: {
-            HapticFeedbackManager.shared.lightTap()
-            action()
-        }) {
+        Button(action: action) {
             VStack(spacing: 4) {
                 // 图标
                 Image(systemName: icon)
@@ -646,10 +639,7 @@ struct LiquidGlassButton: View {
     @State private var isPressed = false
     
     var body: some View {
-        Button(action: {
-            HapticFeedbackManager.shared.lightTap()
-            action()
-        }) {
+        Button(action: action) {
             // 内容层 - 纯文字，白色
             Text(title)
                 .font(.system(size: 18, weight: .medium))

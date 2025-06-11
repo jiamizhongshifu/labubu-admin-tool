@@ -122,7 +122,6 @@ struct FullScreenImageView: View {
                 HStack {
                     // 关闭按钮
                     Button(action: {
-                        HapticFeedbackManager.shared.lightTap()
                         withAnimation(.easeInOut(duration: 0.3)) {
                             isPresented = false
                         }
@@ -157,7 +156,6 @@ struct FullScreenImageView: View {
                     // 图片切换按钮
                     if sticker.hasEnhancedImage {
                         Button(action: {
-                            HapticFeedbackManager.shared.lightTap()
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 sticker.toggleImageDisplay()
                             }

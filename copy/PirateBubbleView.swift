@@ -30,7 +30,6 @@ struct PirateBubbleView: View {
                     
                     // 对话气泡
                     Button(action: {
-                        HapticFeedbackManager.shared.lightTap()
                         dismissBubble()
                     }) {
                         HStack(spacing: 12) {

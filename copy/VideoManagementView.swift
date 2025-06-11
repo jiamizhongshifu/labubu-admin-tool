@@ -75,7 +75,6 @@ struct VideoManagementView: View {
     // MARK: - 简洁的视频入口区域
     private var videoEntrySection: some View {
         Button(action: {
-            HapticFeedbackManager.shared.lightTap()
             showingDetailedView = true
         }) {
             HStack(spacing: 12) {
@@ -312,7 +311,6 @@ struct VideoManagementDetailView: View {
             
             // 视频缩略图/播放按钮
             Button(action: {
-                HapticFeedbackManager.shared.lightTap()
                 showingVideoPlayer = true
             }) {
                 ZStack {
@@ -414,7 +412,6 @@ struct VideoManagementDetailView: View {
             // 第一行：播放和重新生成
             HStack(spacing: 12) {
                 Button(action: {
-                    HapticFeedbackManager.shared.lightTap()
                     showingVideoPlayer = true
                 }) {
                     HStack {
@@ -430,7 +427,6 @@ struct VideoManagementDetailView: View {
                 }
                 
                 Button(action: {
-                    HapticFeedbackManager.shared.lightTap()
                     showingRegenerateAlert = true
                 }) {
                     HStack {
@@ -449,7 +445,6 @@ struct VideoManagementDetailView: View {
             // 第二行：设为壁纸和导出Live Photo
             HStack(spacing: 12) {
                 Button(action: {
-                    HapticFeedbackManager.shared.lightTap()
                     showingSetWallpaperAlert = true
                 }) {
                     HStack {
@@ -465,7 +460,6 @@ struct VideoManagementDetailView: View {
                 }
                 
                 Button(action: {
-                    HapticFeedbackManager.shared.lightTap()
                     onExportLivePhoto()
                 }) {
                     HStack {
@@ -491,7 +485,6 @@ struct VideoManagementDetailView: View {
             // 第三行：删除视频
             HStack {
                 Button(action: {
-                    HapticFeedbackManager.shared.lightTap()
                     showingDeleteAlert = true
                 }) {
                     HStack {

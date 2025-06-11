@@ -53,7 +53,8 @@ struct CollectionView: View {
                 
                 if isFromLeftEdge && isRightSwipe && isHorizontalSwipe {
                     // 添加触觉反馈
-                    HapticFeedbackManager.shared.lightTap()
+                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                    impactFeedback.impactOccurred()
                     
                     // 侧滑返回到首页
                     withAnimation(.easeInOut(duration: 0.3)) {
@@ -123,12 +124,10 @@ struct CollectionView: View {
                                             )
                                             .onTapGesture {
                                                 if editingStickerId == nil {
-                                                    HapticFeedbackManager.shared.lightTap()
                                                     self.showingStickerDetail = sticker
                                                 }
                                             }
                                             .onLongPressGesture {
-                                                HapticFeedbackManager.shared.lightTap()
                                                 if editingStickerId == sticker.id {
                                                     editingStickerId = nil
                                                 } else {
@@ -179,7 +178,6 @@ struct CollectionView: View {
                 HStack {
                     Spacer()
                     Button(action: {
-                        HapticFeedbackManager.shared.lightTap()
                         appState = .camera
                     }) {
                         // 相机图标
@@ -384,10 +382,7 @@ struct SimpleStickerCard: View {
                 VStack {
                     HStack {
                         Spacer()
-                        Button(action: {
-                            HapticFeedbackManager.shared.lightTap()
-                            onDelete()
-                        }) {
+                        Button(action: onDelete) {
                             Image(systemName: "minus.circle.fill")
                                 .font(.system(size: 24))
                                 .foregroundColor(.red)
