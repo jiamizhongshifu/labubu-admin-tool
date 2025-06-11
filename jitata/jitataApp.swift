@@ -21,7 +21,7 @@ struct jitataApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .modelContainer(for: [ToySticker.self, Category.self]) { result in
+                .modelContainer(for: [ToySticker.self]) { result in
                     switch result {
                     case .success(let container):
                         print("✅ ModelContainer创建成功")

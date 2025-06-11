@@ -88,18 +88,18 @@ class ImageEnhancementService: NSObject, ObservableObject {
         print("[图像增强服务] [\(timestamp)] [贴纸: \(sticker.id)]: \(message)")
     }
 
-    func enhanceImage(for sticker: ToySticker, customPrompt: String? = nil, model: AIModel? = nil) async -> Data? {
+    func enhanceImage(for sticker: ToySticker, customPrompt: String? = nil, model: AIModel? = nil, aspectRatio: String = "1:1") async -> Data? {
         // 取消之前的任务（如果有）
         currentTask?.cancel()
         
         // 创建新的增强任务
         currentTask = Task<Data?, Never> {
-            return await performEnhancement(for: sticker, customPrompt: customPrompt, model: model)
+            return await performEnhancement(for: sticker, customPrompt: customPrompt, model: model, aspectRatio: aspectRatio)
         }
         return await currentTask?.value
     }
     
-    private func performEnhancement(for sticker: ToySticker, customPrompt: String? = nil, model: AIModel? = nil, attempt: Int = 1) async -> Data? {
+    private func performEnhancement(for sticker: ToySticker, customPrompt: String? = nil, model: AIModel? = nil, aspectRatio: String = "1:1", attempt: Int = 1) async -> Data? {
         let maxAttempts = 3
         
         // 检查任务是否已被取消
@@ -113,7 +113,8 @@ class ImageEnhancementService: NSObject, ObservableObject {
         await MainActor.run {
             self.currentSticker = sticker
             sticker.aiEnhancementStatus = .processing
-            sticker.aiEnhancementProgress = 0.1
+            sticker.aiEnhancementProgress = 0.05
+            sticker.aiEnhancementMessage = "初始化增强任务..."
             
             // 🔄 重新增强时，清除之前的增强图片并重置显示状态
             if sticker.hasEnhancedImage {
@@ -123,7 +124,7 @@ class ImageEnhancementService: NSObject, ObservableObject {
         }
         
         do {
-            let enhancedData = try await enhanceImageInternal(for: sticker, customPrompt: customPrompt, model: model)
+            let enhancedData = try await enhanceImageInternal(for: sticker, customPrompt: customPrompt, model: model, aspectRatio: aspectRatio)
             await MainActor.run {
                 sticker.aiEnhancementStatus = .completed
                 sticker.aiEnhancementProgress = 1.0
@@ -159,7 +160,7 @@ class ImageEnhancementService: NSObject, ObservableObject {
                 logProgress(for: sticker, "等待 \(delay) 秒后重试...")
                 
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                return await performEnhancement(for: sticker, customPrompt: customPrompt, model: model, attempt: attempt + 1)
+                return await performEnhancement(for: sticker, customPrompt: customPrompt, model: model, aspectRatio: aspectRatio, attempt: attempt + 1)
             } else {
                 logProgress(for: sticker, "所有尝试均失败。最终错误: \(error.localizedDescription)")
                 
@@ -209,7 +210,7 @@ class ImageEnhancementService: NSObject, ObservableObject {
         }
     }
     
-    private func enhanceImageInternal(for sticker: ToySticker, customPrompt: String? = nil, model: AIModel? = nil) async throws -> Data {
+    private func enhanceImageInternal(for sticker: ToySticker, customPrompt: String? = nil, model: AIModel? = nil, aspectRatio: String = "1:1") async throws -> Data {
         // 检查任务是否已被取消
         if Task.isCancelled {
             logProgress(for: sticker, "🚫 增强任务已被取消")
@@ -217,6 +218,10 @@ class ImageEnhancementService: NSObject, ObservableObject {
         }
         
         logProgress(for: sticker, "步骤 1/8: 开始增强处理。")
+        await MainActor.run {
+            sticker.aiEnhancementProgress = 0.1
+            sticker.aiEnhancementMessage = "准备图像数据..."
+        }
         
         // 优先使用TUZI_API_KEY和TUZI_API_BASE，保持向后兼容
         let apiKey: String
@@ -224,7 +229,7 @@ class ImageEnhancementService: NSObject, ObservableObject {
         
         if let tuziKey = APIConfig.tuziAPIKey, !tuziKey.isEmpty {
             apiKey = tuziKey
-                    } else {
+                        } else {
             let openaiKey = APIConfig.openAIAPIKey
             if !openaiKey.isEmpty {
                 apiKey = openaiKey
@@ -239,7 +244,7 @@ class ImageEnhancementService: NSObject, ObservableObject {
         
         if let tuziBase = APIConfig.tuziAPIBase, !tuziBase.isEmpty {
             apiBase = tuziBase
-        } else {
+                    } else {
             let openaiBase = APIConfig.openAIBaseURL
             if !openaiBase.isEmpty {
                 apiBase = openaiBase
@@ -269,6 +274,10 @@ class ImageEnhancementService: NSObject, ObservableObject {
         if selectedModel == .fluxKontext {
             // Flux-Kontext需要压缩图像用于上传到图床
             logProgress(for: sticker, "步骤 2/8: 开始图像压缩...")
+            await MainActor.run {
+                sticker.aiEnhancementProgress = 0.15
+                sticker.aiEnhancementMessage = "压缩图像数据..."
+            }
             
             // 🔧 使用新的PNG压缩策略
             guard let compressed = compressImage(UIImage(data: imageData)!, targetSize: CGSize(width: 1024, height: 1024), for: sticker) else {
@@ -277,9 +286,17 @@ class ImageEnhancementService: NSObject, ObservableObject {
             compressedImageData = compressed
             
             logProgress(for: sticker, "步骤 2/8: PNG压缩完成，从 \(imageData.count) 字节减少到 \(compressedImageData.count) 字节")
+            await MainActor.run {
+                sticker.aiEnhancementProgress = 0.2
+                sticker.aiEnhancementMessage = "图像压缩完成"
+            }
         } else {
             // GPT-4 Vision将在后续步骤中处理图像压缩
             logProgress(for: sticker, "步骤 2/8: GPT-4 Vision将使用本地图像数据")
+            await MainActor.run {
+                sticker.aiEnhancementProgress = 0.15
+                sticker.aiEnhancementMessage = "准备本地图像数据..."
+            }
             compressedImageData = imageData // 使用原始数据，后续会重新压缩
         }
         
@@ -295,6 +312,10 @@ class ImageEnhancementService: NSObject, ObservableObject {
         
         let apiURL = URL(string: "\(apiBase)\(apiEndpoint)")!
         logProgress(for: sticker, "步骤 3/8: 准备API请求到 \(apiURL) (模型: \(selectedModel.displayName))")
+        await MainActor.run {
+            sticker.aiEnhancementProgress = 0.25
+            sticker.aiEnhancementMessage = "准备API请求..."
+        }
         
         // 获取提示词（优先使用自定义提示词）
         let finalPrompt: String
@@ -319,7 +340,7 @@ Output format required:
 
 Generate the image immediately.
 """
-            } else {
+        } else {
                 finalPrompt = customPrompt
             }
             logProgress(for: sticker, "步骤 4/8: 使用自定义提示词")
@@ -352,7 +373,8 @@ Generate the image immediately.
         logProgress(for: sticker, "📝 提示词: \(finalPrompt)")
         
         await MainActor.run {
-            sticker.aiEnhancementProgress = 0.3
+            sticker.aiEnhancementProgress = 0.35
+            sticker.aiEnhancementMessage = "构建请求参数..."
         }
         
         // 🚀 构造API请求体（根据模型类型）
@@ -365,7 +387,7 @@ Generate the image immediately.
             requestBody = [
                 "model": selectedModel.rawValue,
                 "prompt": enhancedPrompt,
-                "aspect_ratio": "1:1",           // 保持1:1比例
+                "aspect_ratio": aspectRatio,           // 🎯 使用用户选择的比例
                 "output_format": "png",          // PNG格式
                 "output_quality": 95,            // 高质量输出
                 "safety_tolerance": 2,           // 安全容忍度
@@ -634,7 +656,8 @@ Generate the image immediately.
             }
             
             await MainActor.run {
-                sticker.aiEnhancementProgress = 0.7
+                sticker.aiEnhancementProgress = 0.65
+                sticker.aiEnhancementMessage = "处理API响应..."
             }
             
             // 🔍 调试信息：记录完整的API响应
@@ -697,10 +720,52 @@ Generate the image immediately.
             }
             
             // 下载增强后的图像
+            await MainActor.run {
+                sticker.aiEnhancementProgress = 0.8
+                sticker.aiEnhancementMessage = "下载增强图像..."
+            }
+            
             let enhancedImageData = try await downloadImage(from: resultImageUrl, for: sticker)
             
             logProgress(for: sticker, "步骤 8/8: 图像下载完成，大小: \(enhancedImageData.count) 字节")
             
+            // 更新UI
+            await MainActor.run {
+                sticker.enhancedImageData = enhancedImageData
+                sticker.aiEnhancementStatus = .completed
+                sticker.aiEnhancementProgress = 0.95
+                
+                // 🎯 增强完成后自动切换到显示增强图片
+                sticker.isShowingEnhancedImage = true
+                
+                // 强制触发UI更新
+                sticker.aiEnhancementMessage = "正在上传增强图片..."
+            }
+            
+            // 🎯 上传AI增强图片到Supabase
+            do {
+                let enhancedFileName = "enhanced_\(sticker.id.uuidString)_\(Date().timeIntervalSince1970).png"
+                let enhancedURL = try await uploadEnhancedImageToSupabase(enhancedImageData, fileName: enhancedFileName, for: sticker)
+                
+                await MainActor.run {
+                    sticker.enhancedSupabaseImageURL = enhancedURL
+                    sticker.aiEnhancementProgress = 1.0
+                    sticker.aiEnhancementMessage = "AI增强完成！"
+                    self.currentSticker = nil
+                }
+                
+                logProgress(for: sticker, "✅ AI增强图片已上传到Supabase: \(enhancedURL)")
+            } catch {
+                await MainActor.run {
+                    sticker.aiEnhancementProgress = 1.0
+                    sticker.aiEnhancementMessage = "AI增强完成！(上传失败: \(error.localizedDescription))"
+                    self.currentSticker = nil
+                }
+                
+                logProgress(for: sticker, "⚠️ AI增强图片上传失败: \(error.localizedDescription)")
+            }
+            
+            logProgress(for: sticker, "增强完成成功！图像已保存并更新UI")
             return enhancedImageData
             
         } catch {
@@ -853,6 +918,11 @@ Generate the image immediately.
         logProgress(for: sticker, "步骤 7.5/8: 提取到图像URL，开始下载...")
         logProgress(for: sticker, "图像URL: \(url.absoluteString)")
         
+        await MainActor.run {
+            sticker.aiEnhancementProgress = 0.85
+            sticker.aiEnhancementMessage = "连接图像服务器..."
+        }
+        
         // 下载增强后的图像
         let (enhancedImageData, response) = try await urlSession.data(from: url)
         
@@ -878,6 +948,11 @@ Generate the image immediately.
             }
         }
         
+        await MainActor.run {
+            sticker.aiEnhancementProgress = 0.95
+            sticker.aiEnhancementMessage = "验证图像数据..."
+        }
+        
         // 验证下载的图像数据是否有效
         if let testImage = UIImage(data: enhancedImageData) {
             logProgress(for: sticker, "✅ 增强图像数据验证成功，尺寸: \(testImage.size)")
@@ -899,7 +974,7 @@ Generate the image immediately.
             self.currentSticker = nil
             
             // 强制触发UI更新
-            sticker.aiEnhancementMessage = "增强完成，图像已更新"
+            sticker.aiEnhancementMessage = "AI增强完成！"
         }
         
         logProgress(for: sticker, "增强完成成功！图像已保存并更新UI")
@@ -1065,6 +1140,54 @@ Generate the image immediately.
             }
         } catch {
             logProgress(for: sticker, "❌ Supabase上传网络错误: \(error.localizedDescription)")
+            throw error
+        }
+    }
+    
+    // 🎯 上传AI增强图像到Supabase存储
+    private func uploadEnhancedImageToSupabase(_ imageData: Data, fileName: String, for sticker: ToySticker) async throws -> String {
+        guard let supabaseURL = APIConfig.supabaseURL,
+              let supabaseKey = APIConfig.supabaseServiceRoleKey else {
+            logProgress(for: sticker, "❌ Supabase配置缺失")
+            throw NSError(domain: "SupabaseUpload", code: -1, userInfo: [NSLocalizedDescriptionKey: "Supabase配置缺失"])
+        }
+        
+        let bucket = APIConfig.supabaseStorageBucket
+        let uploadURL = URL(string: "\(supabaseURL)/storage/v1/object/\(bucket)/\(fileName)")!
+        
+        logProgress(for: sticker, "🔄 开始上传AI增强图片到Supabase")
+        logProgress(for: sticker, "📝 文件名: \(fileName)")
+        logProgress(for: sticker, "📝 图像数据大小: \(imageData.count) 字节")
+        
+        var request = URLRequest(url: uploadURL)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(supabaseKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("image/png", forHTTPHeaderField: "Content-Type")
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.httpBody = imageData
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                logProgress(for: sticker, "❌ 无效的HTTP响应")
+                throw NSError(domain: "SupabaseUpload", code: -1, userInfo: [NSLocalizedDescriptionKey: "无效的HTTP响应"])
+            }
+            
+            logProgress(for: sticker, "📥 Supabase响应状态码: \(httpResponse.statusCode)")
+            
+            if httpResponse.statusCode == 200 || httpResponse.statusCode == 201 {
+                // 构建公开访问URL
+                let publicURL = "\(supabaseURL)/storage/v1/object/public/\(bucket)/\(fileName)"
+                logProgress(for: sticker, "✅ AI增强图片上传成功: \(publicURL)")
+                return publicURL
+            } else {
+                let errorMessage = String(data: data, encoding: .utf8) ?? "未知错误"
+                logProgress(for: sticker, "❌ AI增强图片上传失败 (\(httpResponse.statusCode)): \(errorMessage)")
+                throw NSError(domain: "SupabaseUpload", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "上传失败: \(errorMessage)"])
+            }
+        } catch {
+            logProgress(for: sticker, "❌ AI增强图片上传网络错误: \(error.localizedDescription)")
             throw error
         }
     }

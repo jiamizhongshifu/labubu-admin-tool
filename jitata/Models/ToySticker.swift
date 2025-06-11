@@ -43,6 +43,45 @@ enum AIEnhancementStatus: String, CaseIterable {
     }
 }
 
+/// 视频生成状态枚举
+enum VideoGenerationStatus: String, CaseIterable {
+    case none = "none"              // 未生成
+    case pending = "pending"        // 等待生成
+    case processing = "processing"  // 生成中
+    case completed = "completed"    // 生成完成
+    case failed = "failed"         // 生成失败
+    
+    var displayName: String {
+        switch self {
+        case .none:
+            return "未生成"
+        case .pending:
+            return "等待生成"
+        case .processing:
+            return "生成中"
+        case .completed:
+            return "已生成"
+        case .failed:
+            return "生成失败"
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .none:
+            return "video.slash"
+        case .pending:
+            return "clock"
+        case .processing:
+            return "arrow.triangle.2.circlepath"
+        case .completed:
+            return "checkmark.circle.fill"
+        case .failed:
+            return "exclamationmark.triangle.fill"
+        }
+    }
+}
+
 @Model
 final class ToySticker: Identifiable {
     var id: UUID
@@ -71,13 +110,28 @@ final class ToySticker: Identifiable {
     
     // MARK: - Supabase Storage Properties
     var supabaseImageURL: String?  // 预上传到Supabase的图片URL
+    var enhancedSupabaseImageURL: String?  // 🎯 AI增强图片的Supabase URL
+    
+    // MARK: - Video Generation Properties
+    var videoURL: String?  // 生成的视频URL
+    var videoTaskId: String?  // 可灵API任务ID
+    var videoGenerationStatusRaw: String = "none"
+    var videoGenerationProgress: Double = 0.0
+    var videoGenerationMessage: String = ""
+    var videoGenerationPrompt: String?  // 视频生成使用的提示词
+    
+    // MARK: - Local Video Storage Properties
+    var localVideoPath: String?  // 本地视频文件路径
+    var videoDownloadStatus: String = "none"  // 下载状态：none, downloading, completed, failed
+    var downloadProgress: Double = 0.0  // 下载进度
     
     init(name: String, categoryName: String, originalImage: UIImage, processedImage: UIImage, notes: String = "") {
         self.id = UUID()
         self.name = name
         self.categoryName = categoryName
-        self.originalImageData = originalImage.jpegData(compressionQuality: 0.8) ?? Data()
-        // 🎯 修复：使用PNG格式保存抠图结果，保持透明背景
+        // 🎯 保存高质量原图：使用0.95质量的JPEG，保持高清晰度
+        self.originalImageData = originalImage.jpegData(compressionQuality: 0.95) ?? Data()
+        // 🎯 修复：使用PNG格式保存抠图结果，保持透明背景和最高质量
         self.processedImageData = processedImage.pngData() ?? Data()
         self.createdDate = Date()
         self.notes = notes
@@ -94,6 +148,11 @@ final class ToySticker: Identifiable {
         self.aiEnhancementStatusRaw = AIEnhancementStatus.pending.rawValue
         self.aiEnhancementProgress = 0.0
         self.aiEnhancementMessage = "等待增强"
+        
+        // 初始化视频生成属性
+        self.videoGenerationStatusRaw = VideoGenerationStatus.none.rawValue
+        self.videoGenerationProgress = 0.0
+        self.videoGenerationMessage = ""
     }
     
     var originalImage: UIImage? {
@@ -149,6 +208,59 @@ final class ToySticker: Identifiable {
         set {
             aiEnhancementStatusRaw = newValue.rawValue
         }
+    }
+    
+    /// 视频生成状态
+    var videoGenerationStatus: VideoGenerationStatus {
+        get {
+            return VideoGenerationStatus(rawValue: videoGenerationStatusRaw) ?? .none
+        }
+        set {
+            videoGenerationStatusRaw = newValue.rawValue
+        }
+    }
+    
+    /// 是否有视频
+    var hasVideo: Bool {
+        // 检查是否有云端视频URL且状态为完成
+        let hasCloudVideo = videoURL != nil && !videoURL!.isEmpty && videoGenerationStatus == .completed
+        
+        // 检查是否有本地视频文件
+        let hasLocalVideo: Bool = {
+            let stickerID = id.uuidString
+            let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+            let videosPath = documentsPath.appendingPathComponent("Videos")
+            let localURL = videosPath.appendingPathComponent("video_\(stickerID).mp4")
+            return FileManager.default.fileExists(atPath: localURL.path)
+        }()
+        
+        return hasCloudVideo || hasLocalVideo
+    }
+    
+    /// 获取本地视频URL（如果存在）
+    var localVideoURL: URL? {
+        let stickerID = id.uuidString
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let videosPath = documentsPath.appendingPathComponent("Videos")
+        let localURL = videosPath.appendingPathComponent("video_\(stickerID).mp4")
+        
+        return FileManager.default.fileExists(atPath: localURL.path) ? localURL : nil
+    }
+    
+    /// 获取最佳视频URL（优先本地，备用云端）
+    var bestVideoURL: URL? {
+        // 优先返回本地视频URL
+        if let localURL = localVideoURL {
+            return localURL
+        }
+        
+        // 备用返回云端视频URL
+        guard let cloudURLString = videoURL,
+              let cloudURL = URL(string: cloudURLString) else {
+            return nil
+        }
+        
+        return cloudURL
     }
 }
 

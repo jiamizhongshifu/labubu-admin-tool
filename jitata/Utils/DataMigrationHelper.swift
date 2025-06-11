@@ -10,7 +10,7 @@ class DataMigrationHelper {
     /// - Returns: ModelContainer
     static func createModelContainer() -> ModelContainer {
         do {
-            let container = try ModelContainer(for: ToySticker.self, Category.self)
+            let container = try ModelContainer(for: ToySticker.self)
             print("✅ ModelContainer创建成功")
             return container
         } catch {
@@ -21,7 +21,7 @@ class DataMigrationHelper {
             deleteExistingDatabase()
             
             do {
-                let container = try ModelContainer(for: ToySticker.self, Category.self)
+                let container = try ModelContainer(for: ToySticker.self)
                 print("✅ 重试后ModelContainer创建成功")
                 
                 // 设置用户提示标记

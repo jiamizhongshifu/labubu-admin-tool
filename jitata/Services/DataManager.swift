@@ -15,7 +15,6 @@ class DataManager: ObservableObject {
     static let shared = DataManager()
     
     @Published var toyStickers: [ToySticker] = []
-    @Published var categories: [Category] = []
     
     private var modelContext: ModelContext?
     
@@ -25,13 +24,11 @@ class DataManager: ObservableObject {
     func configure(with modelContext: ModelContext) {
         self.modelContext = modelContext
         loadData()
-        createDefaultCategoriesIfNeeded()
     }
     
     /// 加载所有数据
     private func loadData() {
         loadToyStickers()
-        loadCategories()
     }
     
     /// 加载所有贴纸
@@ -43,33 +40,10 @@ class DataManager: ObservableObject {
                 sortBy: [SortDescriptor(\.createdDate, order: .reverse)]
             )
             toyStickers = try context.fetch(descriptor)
+            print("📊 加载了 \(toyStickers.count) 个贴纸")
         } catch {
-            print("加载贴纸失败: \(error)")
+            print("❌ 加载贴纸失败: \(error)")
             toyStickers = []
-        }
-    }
-    
-    /// 加载所有分类
-    private func loadCategories() {
-        guard let context = modelContext else { return }
-        
-        do {
-            let descriptor = FetchDescriptor<Category>(
-                sortBy: [SortDescriptor(\.createdDate, order: .forward)]
-            )
-            categories = try context.fetch(descriptor)
-        } catch {
-            print("加载分类失败: \(error)")
-            categories = []
-        }
-    }
-    
-    /// 创建默认分类（如果不存在）
-    private func createDefaultCategoriesIfNeeded() {
-        guard categories.isEmpty else { return }
-        
-        for defaultCategory in Category.defaultCategories {
-            addCategory(defaultCategory)
         }
     }
     
@@ -90,8 +64,8 @@ class DataManager: ObservableObject {
             // 🚀 异步预上传图片到Supabase
             Task {
                 await preUploadImageToSupabase(for: sticker)
-            }
-            
+        }
+        
             print("📌 贴纸已保存，可在详情页手动触发AI增强")
         } catch {
             print("❌ 保存贴纸失败: \(error)")
@@ -131,52 +105,6 @@ class DataManager: ObservableObject {
     func toggleFavorite(for sticker: ToySticker) {
         sticker.isFavorite.toggle()
         updateToySticker(sticker)
-    }
-    
-    // MARK: - 分类管理
-    
-    /// 添加新分类
-    func addCategory(_ category: Category) {
-        guard let context = modelContext else { return }
-        
-        context.insert(category)
-        
-        do {
-            try context.save()
-            categories.append(category)
-        } catch {
-            print("保存分类失败: \(error)")
-        }
-    }
-    
-    /// 删除分类
-    func deleteCategory(_ category: Category) {
-        guard let context = modelContext else { return }
-        
-        // 检查是否有贴纸使用此分类
-        let stickersInCategory = toyStickers.filter { $0.categoryName == category.name }
-        
-        if !stickersInCategory.isEmpty {
-            // 将这些贴纸移动到"其他"分类
-            for sticker in stickersInCategory {
-                sticker.categoryName = "其他"
-            }
-            
-            do {
-                try context.save()
-            } catch {
-                print("更新贴纸分类失败: \(error)")
-            }
-        }
-        
-        context.delete(category)
-        
-        do {
-            try context.save()
-            categories.removeAll { $0.id == category.id }
-        } catch {
-            print("删除分类失败: \(error)")
-        }
     }
     
     // MARK: - 查询方法
@@ -248,89 +176,94 @@ class DataManager: ObservableObject {
         
         print("📝 [预上传] 📦 图片压缩完成，大小: \(compressedData.count) 字节")
         
+        // 生成唯一文件名
+        let fileName = "sticker_\(sticker.id.uuidString)_\(Int(Date().timeIntervalSince1970)).jpg"
+        
         do {
             // 上传到Supabase
-            let supabaseURL = try await SupabaseStorageService.shared.uploadImage(
+            let publicURL = try await SupabaseStorageService.shared.uploadImage(
                 compressedData,
+                fileName: fileName,
                 stickerId: sticker.id.uuidString
             )
             
-            // 更新贴纸的Supabase URL
+            // 更新贴纸的存储URL
             await MainActor.run {
-                sticker.supabaseImageURL = supabaseURL
+                sticker.supabaseImageURL = publicURL
                 updateToySticker(sticker)
-                print("📝 [预上传] ✅ 预上传成功，URL已保存: \(supabaseURL)")
             }
             
+            print("📝 [预上传] ✅ 图片上传成功: \(publicURL)")
+            
         } catch {
-            print("📝 [预上传] ❌ Supabase预上传失败: \(error.localizedDescription)")
-            print("📝 [预上传] 🔄 降级到本地存储方案")
-            // Supabase失败时降级到本地存储
+            print("📝 [预上传] ❌ Supabase上传失败: \(error)")
+            // 降级到本地存储
             await useLocalStorageForPreUpload(for: sticker)
         }
     }
     
-    /// 本地存储预上传方案
-    /// 当Supabase不可用时的备选方案
+    /// 使用本地存储作为预上传的降级方案
     private func useLocalStorageForPreUpload(for sticker: ToySticker) async {
-        print("📝 [本地存储] 🚀 开始本地存储预处理")
+        print("📝 [预上传] 📁 使用本地存储方案")
         
-        // 获取处理后的图片数据
+        // 获取处理后的图片
         guard let processedImage = sticker.processedImage else {
-            print("📝 [本地存储] ❌ 无法获取处理后的图片")
+            print("📝 [预上传] ❌ 无法获取处理后的图片")
             return
         }
         
-        // 压缩图片以优化后续处理
-        guard let compressedData = SupabaseStorageService.shared.compressImageForUpload(processedImage, maxSizeKB: 800) else {
-            print("📝 [本地存储] ❌ 图片压缩失败")
-            return
-        }
-        
-        print("📝 [本地存储] 📦 图片压缩完成，大小: \(compressedData.count) 字节")
+        // 保存到本地Documents目录
+        let fileName = "sticker_\(sticker.id.uuidString).jpg"
         
         do {
-            // 保存到应用文档目录
+            // 获取Documents目录
             let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            let fileName = "sticker_\(sticker.id.uuidString)_\(Date().timeIntervalSince1970).png"
             let fileURL = documentsPath.appendingPathComponent(fileName)
             
-            try compressedData.write(to: fileURL)
-            
-            // 生成本地文件URL
-            let localURL = fileURL.absoluteString
-            
-            // 更新贴纸的存储URL（使用本地路径）
-            await MainActor.run {
-                sticker.supabaseImageURL = localURL
-                updateToySticker(sticker)
-                print("📝 [本地存储] ✅ 本地存储成功，路径已保存: \(fileName)")
-                print("📝 [本地存储] 💡 AI增强时将使用本地文件，速度更快")
+            // 将图片转换为JPEG数据并保存
+            if let imageData = processedImage.jpegData(compressionQuality: 0.8) {
+                try imageData.write(to: fileURL)
+                
+                // 更新贴纸的本地存储路径（暂时使用notes字段记录）
+                await MainActor.run {
+                    sticker.notes = "本地存储: \(fileURL.path)"
+                    updateToySticker(sticker)
+                }
+                
+                print("📝 [预上传] ✅ 图片保存到本地: \(fileURL.path)")
+            } else {
+                print("📝 [预上传] ❌ 图片数据转换失败")
             }
             
         } catch {
-            print("📝 [本地存储] ❌ 本地存储失败: \(error.localizedDescription)")
+            print("📝 [预上传] ❌ 本地存储失败: \(error)")
         }
     }
     
-    /// 获取统计信息
-    func getStatistics() -> (totalStickers: Int, categories: Int, favorites: Int) {
-        return (
-            totalStickers: toyStickers.count,
-            categories: categories.count,
-            favorites: getFavoriteToyStickers().count
-        )
-    }
+    // MARK: - 数据库重置功能
     
-    /// 获取分类统计
-    func getCategoryStatistics() -> [(categoryName: String, count: Int)] {
-        var categoryStats: [String: Int] = [:]
+    /// 重置数据库（清除所有数据）
+    func resetDatabase() {
+        guard let context = modelContext else { return }
         
-        for sticker in toyStickers {
-            categoryStats[sticker.categoryName, default: 0] += 1
+        do {
+            // 删除所有贴纸
+            for sticker in toyStickers {
+                context.delete(sticker)
+            }
+            
+            try context.save()
+            
+            // 清空本地数组
+            toyStickers.removeAll()
+            
+            // 设置重置标记
+            UserDefaults.standard.set(true, forKey: "database_was_reset")
+            
+            print("✅ 数据库重置完成")
+            
+        } catch {
+            print("❌ 数据库重置失败: \(error)")
         }
-        
-        return categoryStats.map { (categoryName: $0.key, count: $0.value) }
-            .sorted { $0.count > $1.count }
     }
 } 

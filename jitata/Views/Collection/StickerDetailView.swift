@@ -20,6 +20,13 @@ struct StickerDetailView: View {
     @State private var showingSeriesView = false
     @State private var isRetryingEnhancement = false
     @State private var showingCustomPromptInput = false
+    @State private var showingFullScreenImage = false
+    @State private var showingFullScreen = false
+    @State private var showingVideoDetail = false
+    @State private var showingAIEnhancement = false
+    @State private var showingAspectRatioSelection = false
+    @State private var selectedAspectRatio = "1:1"
+    @State private var showingBackgroundRemoval = false
     
     // 获取当天收集的贴纸（最新的在最左边）
     var todayStickers: [ToySticker] {
@@ -76,8 +83,11 @@ struct StickerDetailView: View {
                 // 中间区域 - 大图展示和左右滑动
                 TabView(selection: $selectedStickerIndex) {
                     ForEach(Array(todayStickers.enumerated()), id: \.element.id) { index, daySticker in
-                        LargeImageView(sticker: daySticker)
-                            .tag(index)
+                        LargeImageView(sticker: daySticker) {
+                            // 点击查看大图
+                            showingFullScreenImage = true
+                        }
+                        .tag(index)
                     }
                 }
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
@@ -184,7 +194,7 @@ struct StickerDetailView: View {
                         // AI增强按钮（未增强或可以重新增强时显示）
                         if currentSticker.aiEnhancementStatus != .processing {
                             Button(action: {
-                                showingCustomPromptInput = true
+                                showingAspectRatioSelection = true
                             }) {
                                 HStack {
                                     if currentSticker.aiEnhancementStatus == .processing || isRetryingEnhancement {
@@ -214,35 +224,58 @@ struct StickerDetailView: View {
                             .padding(.horizontal, 20)
                         }
                         
-                        // 取消增强按钮（处理中时显示）
+                        // AI增强进度提示和取消按钮（处理中时显示）
                         if currentSticker.aiEnhancementStatus == .processing {
-                            Button(action: {
-                                cancelEnhancement()
-                            }) {
-                                HStack {
-                                    Image(systemName: "xmark.circle.fill")
-                                    Text("取消增强")
+                            VStack(spacing: 12) {
+                                // 简化的进度提示
+                                VStack(spacing: 8) {
+                                    HStack {
+                                        Image(systemName: "brain.head.profile")
+                                            .font(.system(size: 16))
+                                            .foregroundColor(.blue)
+                                        
+                                        Text(currentSticker.aiEnhancementMessage)
+                                            .font(.subheadline)
+                                            .foregroundColor(.secondary)
+                                        
+                                        Spacer()
+                                    }
+                                    
+                                    ProgressView(value: currentSticker.aiEnhancementProgress)
+                                        .progressViewStyle(LinearProgressViewStyle(tint: .blue))
+                                        .scaleEffect(y: 1.5)
                                 }
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [Color.red, Color.orange]),
-                                        startPoint: .leading,
-                                        endPoint: .trailing
+                                .padding(.horizontal, 20)
+                                
+                                // 取消增强按钮
+                                Button(action: {
+                                    cancelEnhancement()
+                                }) {
+                                    HStack {
+                                        Image(systemName: "xmark.circle.fill")
+                                        Text("取消增强")
+                                    }
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(
+                                        LinearGradient(
+                                            gradient: Gradient(colors: [Color.red, Color.orange]),
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
                                     )
-                                )
-                                .cornerRadius(12)
-                                .shadow(color: Color.red.opacity(0.3), radius: 6, x: 0, y: 3)
+                                    .cornerRadius(12)
+                                    .shadow(color: Color.red.opacity(0.3), radius: 6, x: 0, y: 3)
+                                }
+                                .padding(.horizontal, 20)
                             }
-                            .padding(.horizontal, 20)
                         }
                         
-                        // AI增强进度视图（处理中时显示）
-                        if currentSticker.aiEnhancementStatus == .processing {
-                            AIEnhancementProgressView(isPresented: .constant(true), sticker: currentSticker)
+                        // 🎯 视频生成按钮（只有AI增强图片上传完成后才显示）
+                        if let enhancedURL = currentSticker.enhancedSupabaseImageURL, !enhancedURL.isEmpty {
+                            VideoGenerationButton(sticker: currentSticker)
                                 .padding(.horizontal, 20)
                         }
                         
@@ -302,9 +335,25 @@ struct StickerDetailView: View {
             SeriesInfoView(categoryName: currentSticker.categoryName)
         }
         .sheet(isPresented: $showingCustomPromptInput) {
-            CustomPromptInputView(isPresented: $showingCustomPromptInput) { prompt, model in
-                triggerEnhancement(with: prompt, using: model)
-            }
+            CustomPromptInputView(
+                sticker: currentSticker,
+                onEnhance: { prompt in
+                    Task {
+                        await enhanceWithAI(prompt: prompt, aspectRatio: selectedAspectRatio)
+                    }
+                }
+            )
+        }
+        .sheet(isPresented: $showingAspectRatioSelection) {
+            AspectRatioSelectionView(
+                selectedAspectRatio: $selectedAspectRatio,
+                onConfirm: {
+                    showingCustomPromptInput = true
+                }
+            )
+        }
+        .fullScreenCover(isPresented: $showingFullScreenImage) {
+            FullScreenImageView(sticker: currentSticker, isPresented: $showingFullScreenImage)
         }
     }
     
@@ -372,6 +421,24 @@ struct StickerDetailView: View {
         triggerEnhancement(with: defaultPrompt, using: .fluxKontext)
     }
     
+    /// 增强AI
+    private func enhanceWithAI(prompt: String, aspectRatio: String) async {
+        guard let enhancedData = await ImageEnhancementService.shared.enhanceImage(
+            for: currentSticker,
+            customPrompt: prompt,
+            model: .fluxKontext,
+            aspectRatio: aspectRatio
+        ) else {
+            return
+        }
+        
+        // 保存增强后的图片数据
+        await MainActor.run {
+            currentSticker.enhancedImageData = enhancedData
+            currentSticker.isShowingEnhancedImage = true
+        }
+    }
+    
     // 格式化日期
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
@@ -415,6 +482,7 @@ struct ThumbnailView: View {
 // MARK: - 大图展示组件
 struct LargeImageView: View {
     let sticker: ToySticker
+    let onTap: () -> Void
     
     var body: some View {
         // 优先显示增强图片
@@ -423,6 +491,9 @@ struct LargeImageView: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(maxHeight: 320)
+                .onTapGesture {
+                    onTap()
+                }
         } else {
             // 加载失败时的占位符，使用半透明背景
             RoundedRectangle(cornerRadius: 20)

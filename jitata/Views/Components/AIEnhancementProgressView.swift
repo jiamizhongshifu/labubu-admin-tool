@@ -22,8 +22,8 @@ struct AIEnhancementProgressView: View {
     }
     
     private var progressOverlay: some View {
-        VStack(spacing: 0) {
-            Spacer()
+            VStack(spacing: 0) {
+                Spacer()
             progressCard
             Spacer()
         }
@@ -47,7 +47,7 @@ struct AIEnhancementProgressView: View {
     }
     
     private var progressCard: some View {
-        VStack(spacing: 16) {
+                VStack(spacing: 16) {
             headerSection
             progressSection
             statusSection
@@ -69,64 +69,64 @@ struct AIEnhancementProgressView: View {
     }
     
     private var headerSection: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(titleText)
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Text(sticker.name)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(titleText)
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                            
+                            Text(sticker.name)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            isPresented = false
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(.secondary)
             }
-            
-            Spacer()
-            
-            Button(action: {
-                isPresented = false
-            }) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title2)
-                    .foregroundColor(.secondary)
-            }
-        }
-    }
-    
+                        }
+                    }
+                    
     private var progressSection: some View {
-        VStack(spacing: 8) {
-            ProgressView(value: sticker.aiEnhancementProgress)
-                .progressViewStyle(LinearProgressViewStyle(tint: progressColor))
+                    VStack(spacing: 8) {
+                        ProgressView(value: sticker.aiEnhancementProgress)
+                            .progressViewStyle(LinearProgressViewStyle(tint: progressColor))
                 .scaleEffect(y: 2.0)
-            
-            HStack {
-                Text(sticker.aiEnhancementMessage)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Spacer()
-                
-                Text("\(Int(sticker.aiEnhancementProgress * 100))%")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(progressColor)
+                        
+                        HStack {
+                            Text(sticker.aiEnhancementMessage)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Spacer()
+                            
+                            Text("\(Int(sticker.aiEnhancementProgress * 100))%")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(progressColor)
             }
-        }
-    }
-    
+                        }
+                    }
+                    
     private var statusSection: some View {
-        HStack(spacing: 8) {
-            Image(systemName: statusIcon)
-                .font(.title2)
-                .foregroundColor(progressColor)
-                .scaleEffect(isVisible && sticker.aiEnhancementStatus == .processing ? 1.2 : 1.0)
-                .animation(sticker.aiEnhancementStatus == .processing ? 
-                         .easeInOut(duration: 1.0).repeatForever(autoreverses: true) : 
-                         .default, value: isVisible)
-            
-            Text(statusDescription)
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
+                    HStack(spacing: 8) {
+                        Image(systemName: statusIcon)
+                            .font(.title2)
+                            .foregroundColor(progressColor)
+                            .scaleEffect(isVisible && sticker.aiEnhancementStatus == .processing ? 1.2 : 1.0)
+                            .animation(sticker.aiEnhancementStatus == .processing ? 
+                                     .easeInOut(duration: 1.0).repeatForever(autoreverses: true) : 
+                                     .default, value: isVisible)
+                        
+                        Text(statusDescription)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
     }
     
     private var compressedImageButton: some View {
@@ -139,7 +139,7 @@ struct AIEnhancementProgressView: View {
     
     private var actionSection: some View {
         Group {
-            if sticker.aiEnhancementStatus == .processing {
+                    if sticker.aiEnhancementStatus == .processing {
                 processingActions
             } else if sticker.aiEnhancementStatus == .failed {
                 failedActions
@@ -149,9 +149,9 @@ struct AIEnhancementProgressView: View {
     
     private var processingActions: some View {
         VStack(spacing: 8) {
-            Text("您可以关闭此窗口，增强将在后台继续进行")
-                .font(.caption2)
-                .foregroundColor(.secondary)
+                        Text("您可以关闭此窗口，增强将在后台继续进行")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
             
             Button(action: {
                 ImageEnhancementService.shared.cancelCurrentEnhancement()
@@ -170,27 +170,27 @@ struct AIEnhancementProgressView: View {
                 .cornerRadius(8)
             }
         }
-        .padding(.top, 8)
+                            .padding(.top, 8)
     }
     
     private var failedActions: some View {
-        Button(action: {
-            Task {
+                        Button(action: {
+                            Task {
                 _ = await ImageEnhancementService.shared.enhanceImage(for: sticker)
-            }
-            isPresented = false
-        }) {
-            Text("重试增强")
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundColor(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.blue)
-                .cornerRadius(8)
-        }
-        .padding(.top, 8)
-    }
+                            }
+                            isPresented = false
+                        }) {
+                            Text("重试增强")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(Color.blue)
+                                .cornerRadius(8)
+                        }
+                        .padding(.top, 8)
+                    }
     
     private func handleCompressedImageNotification(_ notification: Notification) {
         if let userInfo = notification.userInfo,
@@ -441,6 +441,188 @@ struct CompressionComparisonView: View {
 // 新增：通知扩展
 extension Notification.Name {
     static let compressedImageReady = Notification.Name("compressedImageReady")
+}
+
+/// 图片比例选择视图
+struct AspectRatioSelectionView: View {
+    @Binding var selectedAspectRatio: String
+    let onConfirm: () -> Void
+    
+    @Environment(\.dismiss) private var dismiss
+    
+    // 常见图片比例选项
+    private let aspectRatios = [
+        AspectRatioOption(ratio: "1:1", name: "正方形", description: "社交媒体头像"),
+        AspectRatioOption(ratio: "4:3", name: "标准屏幕", description: "传统显示器"),
+        AspectRatioOption(ratio: "3:4", name: "竖屏", description: "手机竖屏"),
+        AspectRatioOption(ratio: "16:9", name: "宽屏", description: "电脑屏幕"),
+        AspectRatioOption(ratio: "9:16", name: "手机竖屏", description: "手机壁纸"),
+        AspectRatioOption(ratio: "3:2", name: "摄影比例", description: "相机照片"),
+        AspectRatioOption(ratio: "2:3", name: "竖版摄影", description: "人像照片"),
+        AspectRatioOption(ratio: "21:9", name: "超宽屏", description: "电影比例")
+    ]
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // 标题说明
+                VStack(spacing: 12) {
+                    Text("选择图片比例")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                    
+                    Text("选择AI增强后的图片比例，不同比例适用于不同场景")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                
+                // 比例选择列表
+                ScrollView {
+                    LazyVGrid(columns: [
+                        GridItem(.flexible(), spacing: 16),
+                        GridItem(.flexible(), spacing: 16)
+                    ], spacing: 16) {
+                        ForEach(aspectRatios, id: \.ratio) { option in
+                            AspectRatioCard(
+                                option: option,
+                                isSelected: selectedAspectRatio == option.ratio,
+                                onTap: {
+                                    selectedAspectRatio = option.ratio
+                                }
+                            )
+                        }
+                    }
+                    .padding()
+                }
+                
+                // 底部确认按钮
+                VStack(spacing: 12) {
+                    Button(action: {
+                        onConfirm()
+                        dismiss()
+                    }) {
+                        Text("确认选择")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.blue)
+                            )
+                    }
+                    
+                    Text("当前选择：\(aspectRatios.first(where: { $0.ratio == selectedAspectRatio })?.name ?? "未知")")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding()
+                .background(Color(.systemBackground))
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("取消") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// 比例选项数据模型
+struct AspectRatioOption {
+    let ratio: String
+    let name: String
+    let description: String
+}
+
+/// 比例选择卡片
+struct AspectRatioCard: View {
+    let option: AspectRatioOption
+    let isSelected: Bool
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 12) {
+                // 比例预览框
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(.systemGray5))
+                        .frame(height: 80)
+                    
+                    // 根据比例显示预览框
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(isSelected ? Color.blue : Color(.systemGray3))
+                        .frame(width: previewWidth, height: previewHeight)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
+                        )
+                }
+                
+                // 比例信息
+                VStack(spacing: 4) {
+                    Text(option.ratio)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(isSelected ? .blue : .primary)
+                    
+                    Text(option.name)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.primary)
+                    
+                    Text(option.description)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isSelected ? Color.blue.opacity(0.1) : Color(.systemBackground))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(isSelected ? Color.blue : Color(.systemGray4), lineWidth: isSelected ? 2 : 1)
+                    )
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    // 计算预览框尺寸
+    private var previewWidth: CGFloat {
+        let components = option.ratio.split(separator: ":").compactMap { Double($0) }
+        guard components.count == 2 else { return 40 }
+        
+        let ratio = components[0] / components[1]
+        let maxSize: CGFloat = 50
+        
+        if ratio > 1 {
+            return maxSize
+        } else {
+            return maxSize * ratio
+        }
+    }
+    
+    private var previewHeight: CGFloat {
+        let components = option.ratio.split(separator: ":").compactMap { Double($0) }
+        guard components.count == 2 else { return 40 }
+        
+        let ratio = components[0] / components[1]
+        let maxSize: CGFloat = 50
+        
+        if ratio > 1 {
+            return maxSize / ratio
+        } else {
+            return maxSize
+        }
+    }
 }
 
 #Preview {
