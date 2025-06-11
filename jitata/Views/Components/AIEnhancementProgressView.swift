@@ -174,23 +174,23 @@ struct AIEnhancementProgressView: View {
     }
     
     private var failedActions: some View {
-                        Button(action: {
-                            Task {
-                _ = await ImageEnhancementService.shared.enhanceImage(for: sticker)
-                            }
-                            isPresented = false
-                        }) {
-                            Text("重试增强")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(Color.blue)
-                                .cornerRadius(8)
-                        }
-                        .padding(.top, 8)
-                    }
+        Button(action: {
+            Task {
+                _ = await ImageEnhancementService.shared.enhanceImage(for: sticker, aspectRatio: sticker.preferredAspectRatio)
+            }
+            isPresented = false
+        }) {
+            Text("重试增强")
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color.blue)
+                .cornerRadius(8)
+        }
+        .padding(.top, 8)
+    }
     
     private func handleCompressedImageNotification(_ notification: Notification) {
         if let userInfo = notification.userInfo,

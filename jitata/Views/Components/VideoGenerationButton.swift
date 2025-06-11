@@ -1,116 +1,208 @@
 import SwiftUI
+import SwiftData
 
 /// 视频生成按钮
 struct VideoGenerationButton: View {
-    let sticker: ToySticker
+    @Bindable var sticker: ToySticker
     @Environment(\.modelContext) private var modelContext
     
-    @State private var showPromptInput = false
-    @State private var showTemplates = false
-    @State private var selectedPrompt = ""
     @State private var isGenerating = false
-    @State private var showError = false
-    @State private var errorMessage = ""
     @State private var generationProgress: Double = 0.0
-    @State private var progressMessage = "准备生成..."
+    @State private var progressMessage = ""
+    @State private var errorMessage = ""
+    @State private var showError = false
+    @State private var showPromptInput = false
+    @State private var selectedPrompt = ""
+    @State private var showCancelConfirmation = false
     
     var body: some View {
-        Button(action: {
-            if sticker.videoGenerationStatus == .none || sticker.videoGenerationStatus == .failed {
-                showPromptInput = true
+        VStack(spacing: 16) {
+            mainButton
+            
+            if sticker.videoGenerationStatus == .processing {
+                progressSection
             }
-        }) {
-            HStack(spacing: 12) {
-                if isGenerating {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(0.8)
-                } else {
-                    Image(systemName: sticker.videoGenerationStatus.icon)
-                        .font(.system(size: 18))
-                }
-                
-                Text(buttonTitle)
-                    .font(.system(size: 16, weight: .medium))
-            }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(buttonBackgroundColor)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
-            )
         }
-        .disabled(isGenerating || sticker.videoGenerationStatus == .processing)
         .sheet(isPresented: $showPromptInput) {
-            VideoPromptInputView(
-                selectedPrompt: $selectedPrompt,
-                showTemplates: $showTemplates,
-                onGenerate: {
-                    startVideoGeneration()
-                }
-            )
+            promptInputSheet
+        }
+        .alert("取消视频生成", isPresented: $showCancelConfirmation) {
+            Button("继续生成", role: .cancel) { }
+            Button("确认取消", role: .destructive) {
+                cancelVideoGeneration()
+            }
+        } message: {
+            Text("确定要取消当前的视频生成吗？")
         }
         .alert("生成失败", isPresented: $showError) {
             Button("确定") { }
         } message: {
             Text(errorMessage)
         }
-        .overlay(
-            Group {
-                if isGenerating {
-                    VStack(spacing: 12) {
-                        Text(progressMessage)
-                            .font(.system(size: 14))
-                            .foregroundColor(.white)
-                        
-                        ProgressView(value: generationProgress)
-                            .progressViewStyle(LinearProgressViewStyle(tint: .white))
-                            .frame(width: 200)
+    }
+    
+    // MARK: - 子视图组件
+    
+    private var mainButton: some View {
+        Button(action: {
+            if sticker.videoGenerationStatus == .processing {
+                showCancelConfirmation = true
+            } else {
+                showPromptInput = true
+            }
+        }) {
+            HStack {
+                if sticker.videoGenerationStatus == .processing {
+                    Image(systemName: "stop.circle.fill")
+                        .foregroundColor(.white)
+                } else {
+                    Image(systemName: "play.circle.fill")
+                        .foregroundColor(.white)
+                }
+                
+                Text(buttonTitle)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(buttonBackground)
+            .cornerRadius(12)
+            .shadow(color: buttonShadowColor, radius: 6, x: 0, y: 3)
+        }
+        .disabled(sticker.videoGenerationStatus == .processing && !canCancel)
+    }
+    
+    private var progressSection: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Image(systemName: "video.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.blue)
+                
+                Text(sticker.videoGenerationMessage)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+            }
+            
+            ProgressView(value: sticker.videoGenerationProgress)
+                .progressViewStyle(LinearProgressViewStyle(tint: .blue))
+                .scaleEffect(y: 1.5)
+        }
+    }
+    
+    private var promptInputSheet: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                Text("选择视频生成提示词")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                
+                LazyVGrid(columns: [
+                    GridItem(.flexible()),
+                    GridItem(.flexible())
+                ], spacing: 12) {
+                    ForEach(videoPrompts, id: \.self) { prompt in
+                        Button(action: {
+                            selectedPrompt = prompt
+                            showPromptInput = false
+                            startVideoGeneration()
+                        }) {
+                            Text(prompt)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.primary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 16)
+                                .frame(maxWidth: .infinity, minHeight: 80)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color.blue.opacity(0.1))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                                        )
+                                )
+                        }
                     }
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.black.opacity(0.8))
-                    )
-                    .offset(y: -60)
+                }
+                
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("视频生成")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("取消") {
+                        showPromptInput = false
+                    }
                 }
             }
-        )
+        }
     }
+    
+    // MARK: - 计算属性
     
     private var buttonTitle: String {
         switch sticker.videoGenerationStatus {
-        case .none:
-            return "生成动态壁纸"
-        case .pending:
-            return "等待生成"
         case .processing:
-            return "生成中..."
+            return "取消生成"
         case .completed:
-            return "已生成壁纸"
+            return "重新生成视频"
         case .failed:
-            return "生成动态视频壁纸"
+            return "重试生成视频"
+        default:
+            return "生成动态视频"
         }
     }
     
-    private var buttonBackgroundColor: Color {
+    private var buttonBackground: LinearGradient {
         switch sticker.videoGenerationStatus {
-        case .none, .failed:
-            return Color.purple
-        case .pending, .processing:
-            return Color.orange
-        case .completed:
-            return Color.green
+        case .processing:
+            return LinearGradient(
+                gradient: Gradient(colors: [Color.red, Color.orange]),
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        default:
+            return LinearGradient(
+                gradient: Gradient(colors: [Color.blue, Color.purple]),
+                startPoint: .leading,
+                endPoint: .trailing
+            )
         }
     }
+    
+    private var buttonShadowColor: Color {
+        switch sticker.videoGenerationStatus {
+        case .processing:
+            return Color.red.opacity(0.3)
+        default:
+            return Color.blue.opacity(0.3)
+        }
+    }
+    
+    private var canCancel: Bool {
+        return sticker.videoGenerationStatus == .processing
+    }
+    
+    private var videoPrompts: [String] {
+        return [
+            "轻柔摇摆",
+            "缓慢旋转",
+            "上下浮动",
+            "左右摆动",
+            "闪烁光芒",
+            "渐变色彩"
+        ]
+    }
+    
+    // MARK: - 私有方法
     
     private func startVideoGeneration() {
-        // 🎯 检查是否有AI增强图片的Supabase URL
         guard let enhancedImageURL = sticker.enhancedSupabaseImageURL else {
             errorMessage = "请先进行AI增强并等待上传完成"
             showError = true
@@ -121,236 +213,107 @@ struct VideoGenerationButton: View {
         generationProgress = 0.1
         progressMessage = "准备生成视频..."
         
-        // 更新贴纸状态
         sticker.videoGenerationStatus = .processing
         sticker.videoGenerationPrompt = selectedPrompt
         sticker.videoGenerationProgress = 0.1
         sticker.videoGenerationMessage = progressMessage
         
-        // 保存状态
         try? modelContext.save()
         
-        // 🎯 使用AI增强图片的URL调用可灵API生成视频
-        KlingAPIService.shared.generateVideoFromImage(
-            imageURL: enhancedImageURL,
-            prompt: selectedPrompt
-        ) { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let taskId):
-                    // 保存任务ID
-                    sticker.videoTaskId = taskId
-                    sticker.videoGenerationProgress = 0.3
-                    progressMessage = "视频生成中，请稍候..."
-                    try? modelContext.save()
-                    
-                    // 开始轮询任务状态
-                    pollVideoGenerationStatus(taskId: taskId)
-                    
-                case .failure(let error):
-                    isGenerating = false
-                    sticker.videoGenerationStatus = .failed
-                    errorMessage = error.localizedDescription
-                    showError = true
-                    try? modelContext.save()
+        detectImageAspectRatio(imageURL: enhancedImageURL) { aspectRatio in
+            let finalAspectRatio = aspectRatio ?? "1:1"
+            print("🎯 检测到图片比例: \(finalAspectRatio)")
+            
+            KlingAPIService.shared.generateVideoFromImage(
+                imageURL: enhancedImageURL,
+                prompt: selectedPrompt,
+                aspectRatio: finalAspectRatio
+            ) { result in
+                DispatchQueue.main.async {
+                    handleVideoGenerationResult(result)
                 }
             }
         }
     }
     
-    private func pollVideoGenerationStatus(taskId: String) {
-        KlingAPIService.shared.pollTaskUntilComplete(taskId: taskId) { result in
-            DispatchQueue.main.async {
-                isGenerating = false
-                
-                switch result {
-                case .success(let videoURL):
-                    // 保存视频URL
-                    sticker.videoURL = videoURL
-                    sticker.videoGenerationStatus = .completed
-                    sticker.videoGenerationProgress = 0.9
-                    sticker.videoGenerationMessage = "正在下载到本地..."
-                    try? modelContext.save()
-                    
-                    // 🎯 自动下载视频到本地
-                    downloadVideoToLocal(videoURL: videoURL)
-                    
-                case .failure(let error):
-                    sticker.videoGenerationStatus = .failed
-                    errorMessage = error.localizedDescription
-                    showError = true
-                    try? modelContext.save()
-                }
-            }
+    private func detectImageAspectRatio(imageURL: String, completion: @escaping (String?) -> Void) {
+        guard let url = URL(string: imageURL) else {
+            completion(nil)
+            return
         }
+        
+        URLSession.shared.dataTask(with: url) { data, _, error in
+            guard let data = data, error == nil,
+                  let image = UIImage(data: data) else {
+                completion(nil)
+                return
+            }
+            
+            let width = image.size.width
+            let height = image.size.height
+            let ratio = width / height
+            
+            let aspectRatio: String
+            if abs(ratio - 1.0) < 0.1 {
+                aspectRatio = "1:1"
+            } else if ratio > 1.5 {
+                aspectRatio = "16:9"
+            } else if ratio < 0.7 {
+                aspectRatio = "9:16"
+            } else {
+                aspectRatio = "1:1"
+            }
+            
+            DispatchQueue.main.async {
+                completion(aspectRatio)
+            }
+        }.resume()
     }
     
-    // MARK: - 本地视频下载
-    
-    private func downloadVideoToLocal(videoURL: String) {
-        let stickerID = sticker.id.uuidString
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let videosPath = documentsPath.appendingPathComponent("Videos")
-        
-        // 确保目录存在
-        if !FileManager.default.fileExists(atPath: videosPath.path) {
-            try? FileManager.default.createDirectory(at: videosPath, withIntermediateDirectories: true)
-        }
-        
-        let localURL = videosPath.appendingPathComponent("video_\(stickerID).mp4")
-        
-        // 如果本地文件已存在，直接完成
-        if FileManager.default.fileExists(atPath: localURL.path) {
+    private func handleVideoGenerationResult(_ result: Result<String, Error>) {
+        switch result {
+        case .success(let videoURL):
+            if let oldLocalURL = sticker.localVideoURL {
+                try? FileManager.default.removeItem(at: oldLocalURL)
+                print("🗑️ 已清理旧的本地视频文件")
+            }
+            
+            sticker.videoURL = videoURL
+            sticker.videoGenerationStatus = .completed
             sticker.videoGenerationProgress = 1.0
-            sticker.videoGenerationMessage = "视频已保存到本地"
+            sticker.videoGenerationMessage = "视频生成完成"
             try? modelContext.save()
-            return
-        }
-        
-        guard let url = URL(string: videoURL) else {
-            sticker.videoGenerationMessage = "视频下载失败：无效URL"
+            
+            print("✅ 视频生成完成，URL: \(videoURL)")
+            print("📝 新视频已保存到云端，可在详情页进行管理")
+            
+        case .failure(let error):
+            sticker.videoGenerationStatus = .failed
+            sticker.videoGenerationProgress = 0.0
+            sticker.videoGenerationMessage = "生成失败: \(error.localizedDescription)"
             try? modelContext.save()
-            return
+            
+            errorMessage = error.localizedDescription
+            showError = true
+            print("❌ 视频生成失败: \(error)")
         }
         
-        print("⬇️ 开始下载视频到本地: \(videoURL)")
-        
-        // 开始下载
-        let task = URLSession.shared.downloadTask(with: url) { tempURL, response, error in
-            DispatchQueue.main.async {
-                if let error = error {
-                    print("❌ 视频下载失败: \(error.localizedDescription)")
-                    sticker.videoGenerationMessage = "视频下载失败"
-                    try? modelContext.save()
-                    return
-                }
-                
-                guard let tempURL = tempURL else {
-                    sticker.videoGenerationMessage = "视频下载失败：无数据"
-                    try? modelContext.save()
-                    return
-                }
-                
-                do {
-                    // 移动临时文件到目标位置
-                    if FileManager.default.fileExists(atPath: localURL.path) {
-                        try FileManager.default.removeItem(at: localURL)
-                    }
-                    try FileManager.default.moveItem(at: tempURL, to: localURL)
-                    
-                    print("✅ 视频下载完成: \(localURL.path)")
-                    sticker.videoGenerationProgress = 1.0
-                    sticker.videoGenerationMessage = "视频已保存到本地"
-                    try? modelContext.save()
-                } catch {
-                    print("❌ 视频文件移动失败: \(error.localizedDescription)")
-                    sticker.videoGenerationMessage = "视频保存失败"
-                    try? modelContext.save()
-                }
-            }
-        }
-        
-        task.resume()
+        isGenerating = false
     }
-}
-
-/// 视频提示词输入视图
-struct VideoPromptInputView: View {
-    @Binding var selectedPrompt: String
-    @Binding var showTemplates: Bool
-    let onGenerate: () -> Void
     
-    @Environment(\.dismiss) private var dismiss
-    @State private var customPrompt = ""
-    
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
-                Text("描述视频效果")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                
-                // 提示词输入框
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("视频描述")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.secondary)
-                    
-                    TextEditor(text: $customPrompt)
-                        .frame(height: 100)
-                        .padding(8)
-                        .background(Color.gray.opacity(0.1))
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
-                }
-                
-                // 模板按钮
-                Button(action: {
-                    showTemplates = true
-                }) {
-                    HStack {
-                        Image(systemName: "text.badge.star")
-                        Text("使用模板")
-                    }
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.blue)
-                }
-                
-                // 模板列表
-                if showTemplates {
-                    ScrollView {
-                        VStack(spacing: 12) {
-                            ForEach(KlingConfig.videoPromptTemplates, id: \.self) { template in
-                                Button(action: {
-                                    customPrompt = template
-                                    showTemplates = false
-                                }) {
-                                    Text(template)
-                                        .font(.system(size: 14))
-                                        .multilineTextAlignment(.leading)
-                                        .foregroundColor(.primary)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(12)
-                                        .background(Color.gray.opacity(0.1))
-                                        .cornerRadius(8)
-                                }
-                            }
-                        }
-                    }
-                    .frame(maxHeight: 200)
-                }
-                
-                Spacer()
-                
-                // 生成按钮
-                Button(action: {
-                    selectedPrompt = customPrompt.isEmpty ? "潮玩在竖直画面中央缓缓旋转360度，背景简洁，适合手机壁纸" : customPrompt
-                    dismiss()
-                    onGenerate()
-                }) {
-                    Text("开始生成")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.purple)
-                        )
-                }
-            }
-            .padding()
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("取消") {
-                        dismiss()
-                    }
-                }
-            }
+    private func cancelVideoGeneration() {
+        if let taskId = sticker.videoTaskId {
+            KlingAPIService.shared.cancelTask(taskId: taskId)
         }
+        
+        sticker.videoGenerationStatus = .none
+        sticker.videoGenerationProgress = 0.0
+        sticker.videoGenerationMessage = ""
+        sticker.videoTaskId = nil
+        
+        try? modelContext.save()
+        
+        isGenerating = false
+        print("🚫 用户取消了视频生成")
     }
 } 

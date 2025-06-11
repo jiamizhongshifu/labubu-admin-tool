@@ -102,28 +102,15 @@ struct HomeView: View {
                     .ignoresSafeArea(.all)
             }
             
-            // 主要内容区域
+            // 主要内容区域 - 只显示导航栏，不显示视频列表
             VStack(spacing: 0) {
                 // 顶部导航栏（透明背景）
                 topNavigationBar
                 
-                // 中间内容区域
-                if !videos.isEmpty {
-                    // 视频墙内容
-                    VideoWallView(
-                        videos: videos,
-                        onVideoTap: { video in
-                            selectedVideo = video
-                            showingVideoDetail = true
-                        }
-                    )
-                    .background(Color.black.opacity(0.7))
-                } else {
-                    // 空白区域
-                    Spacer()
-                }
+                // 中间区域留空，让动态壁纸完全展示
+                Spacer()
                 
-                // 🎯 新增：底部导航栏样式入口
+                // 🎯 底部导航栏
                 bottomActionButtons
             }
         }
@@ -131,6 +118,15 @@ struct HomeView: View {
             print("🎬 homeContentView appeared, loading videos...")
             loadVideos()
             startPirateBubbleTimer()
+            
+            // 🎯 监听壁纸更改通知
+            NotificationCenter.default.addObserver(
+                forName: NSNotification.Name("WallpaperChanged"),
+                object: nil,
+                queue: .main
+            ) { _ in
+                loadCustomWallpaperSetting()
+            }
         }
         .onDisappear {
             stopPirateBubbleTimer()
@@ -154,6 +150,9 @@ struct HomeView: View {
                 },
                 onResetToDefault: {
                     resetToDefaultWallpaper()
+                },
+                onDeleteVideo: { videoURL in
+                    deleteCustomWallpaper(videoURL)
                 }
             )
         }
@@ -449,31 +448,120 @@ struct HomeView: View {
     
     /// 设置自定义动态壁纸
     private func setCustomWallpaper(_ videoURL: URL) {
+        print("🎯 setCustomWallpaper 被调用！")
+        print("✨ 开始设置自定义动态壁纸...")
+        print("📱 新壁纸URL: \(videoURL.absoluteString)")
+        print("📱 URL类型: \(videoURL.isFileURL ? "本地文件" : "云端URL")")
+        
+        // 更新状态
         customWallpaperURL = videoURL
         
         // 保存到UserDefaults
         UserDefaults.standard.set(videoURL.absoluteString, forKey: "custom_wallpaper_url")
         
-        print("✨ 设置自定义动态壁纸: \(videoURL.lastPathComponent)")
+        // 验证保存是否成功
+        let savedURL = UserDefaults.standard.string(forKey: "custom_wallpaper_url")
+        print("💾 UserDefaults保存验证: \(savedURL == videoURL.absoluteString ? "成功" : "失败")")
+        
+        print("✅ 自定义动态壁纸设置完成: \(videoURL.lastPathComponent)")
+        print("📱 当前自定义壁纸URL: \(customWallpaperURL?.absoluteString ?? "无")")
     }
     
     /// 重置为默认预设壁纸
     private func resetToDefaultWallpaper() {
+        print("🔄 开始重置为默认预设壁纸...")
+        
+        // 清除自定义壁纸设置
         customWallpaperURL = nil
         
         // 从UserDefaults移除
         UserDefaults.standard.removeObject(forKey: "custom_wallpaper_url")
         
-        print("🔄 重置为默认预设壁纸")
+        // 确保预设视频已加载
+        if presetVideoURL == nil {
+            print("⚠️ 预设视频未加载，重新加载...")
+            loadPresetVideo()
+        }
+        
+        print("✅ 重置为默认预设壁纸完成")
+        print("📱 当前预设视频URL: \(presetVideoURL?.absoluteString ?? "无")")
+        print("📱 当前自定义壁纸URL: \(customWallpaperURL?.absoluteString ?? "无")")
+    }
+    
+    /// 删除自定义壁纸
+    private func deleteCustomWallpaper(_ videoURL: URL) {
+        print("🗑️ 开始删除自定义壁纸...")
+        print("📱 要删除的壁纸URL: \(videoURL.absoluteString)")
+        
+        // 从videos数组中移除
+        videos.removeAll { $0.url == videoURL }
+        
+        // 如果删除的是当前使用的壁纸，重置为默认
+        if customWallpaperURL == videoURL {
+            print("⚠️ 删除的是当前壁纸，重置为默认")
+            resetToDefaultWallpaper()
+        }
+        
+        // 从数据库中删除对应的贴纸视频
+        let videoURLString = videoURL.absoluteString
+        let descriptor = FetchDescriptor<ToySticker>(
+            predicate: #Predicate { sticker in
+                sticker.videoURL == videoURLString
+            }
+        )
+        
+        do {
+            let stickers = try modelContext.fetch(descriptor)
+            for sticker in stickers {
+                // 删除本地视频文件
+                if let localURL = sticker.localVideoURL {
+                    try? FileManager.default.removeItem(at: localURL)
+                }
+                
+                // 清除视频相关信息
+                sticker.videoURL = nil
+                sticker.videoTaskId = nil
+                sticker.videoGenerationStatus = .none
+                sticker.videoGenerationProgress = 0.0
+                sticker.videoGenerationMessage = ""
+                sticker.videoGenerationPrompt = nil
+            }
+            
+            try modelContext.save()
+            print("✅ 壁纸删除完成")
+        } catch {
+            print("❌ 删除壁纸时出错: \(error)")
+        }
     }
     
     /// 加载保存的自定义壁纸设置
     private func loadCustomWallpaperSetting() {
-        if let savedURLString = UserDefaults.standard.string(forKey: "custom_wallpaper_url"),
-           let savedURL = URL(string: savedURLString),
-           FileManager.default.fileExists(atPath: savedURL.path) {
+        guard let savedURLString = UserDefaults.standard.string(forKey: "custom_wallpaper_url") else {
+            print("📱 未找到保存的自定义壁纸设置")
+            return
+        }
+        
+        guard let savedURL = URL(string: savedURLString) else {
+            print("❌ 保存的壁纸URL格式无效: \(savedURLString)")
+            UserDefaults.standard.removeObject(forKey: "custom_wallpaper_url")
+            return
+        }
+        
+        print("🔍 检查保存的壁纸URL: \(savedURLString)")
+        
+        // 如果是本地文件，检查文件是否存在
+        if savedURL.isFileURL {
+            if FileManager.default.fileExists(atPath: savedURL.path) {
+                customWallpaperURL = savedURL
+                print("✅ 加载保存的本地自定义壁纸: \(savedURL.lastPathComponent)")
+            } else {
+                print("❌ 本地壁纸文件不存在，清除设置: \(savedURL.path)")
+                UserDefaults.standard.removeObject(forKey: "custom_wallpaper_url")
+            }
+        } else {
+            // 云端URL直接使用，不检查文件存在性
             customWallpaperURL = savedURL
-            print("📱 加载保存的自定义壁纸: \(savedURL.lastPathComponent)")
+            print("✅ 加载保存的云端自定义壁纸: \(savedURL.absoluteString)")
         }
     }
     

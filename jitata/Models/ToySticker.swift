@@ -99,6 +99,7 @@ final class ToySticker: Identifiable {
     var lastEnhancementAttempt: Date? = nil
     var enhancementRetryCount: Int = 0
     var enhancementPrompt: String? = nil
+    var preferredAspectRatio: String = KlingConfig.defaultAspectRatio  // 用户选择的图片比例
     
     // MARK: - New AI Enhancement Properties
     var aiEnhancementStatusRaw: String = "pending"
@@ -143,6 +144,7 @@ final class ToySticker: Identifiable {
         self.lastEnhancementAttempt = nil
         self.enhancementRetryCount = 0
         self.enhancementPrompt = nil
+        self.preferredAspectRatio = KlingConfig.defaultAspectRatio
         
         // 初始化新的AI增强属性
         self.aiEnhancementStatusRaw = AIEnhancementStatus.pending.rawValue

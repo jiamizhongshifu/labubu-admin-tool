@@ -25,7 +25,7 @@ struct StickerDetailView: View {
     @State private var showingVideoDetail = false
     @State private var showingAIEnhancement = false
     @State private var showingAspectRatioSelection = false
-    @State private var selectedAspectRatio = "1:1"
+    @State private var selectedAspectRatio = KlingConfig.defaultAspectRatio
     @State private var showingBackgroundRemoval = false
     
     // 获取当天收集的贴纸（最新的在最左边）
@@ -110,11 +110,38 @@ struct StickerDetailView: View {
                         }
                         
                         HStack {
-                            Image(systemName: "tag.fill")
-                                .foregroundColor(.blue)
-                            Text(currentSticker.categoryName)
-                                .font(.subheadline)
-                                .foregroundColor(.blue)
+                            HStack {
+                                Image(systemName: "tag.fill")
+                                    .foregroundColor(.blue)
+                                Text(currentSticker.categoryName)
+                                    .font(.subheadline)
+                                    .foregroundColor(.blue)
+                            }
+                            
+                            Spacer()
+                            
+                            // 简化的查看系列按钮
+                            Button(action: {
+                                showingSeriesView = true
+                            }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "cube.box.fill")
+                                        .font(.system(size: 12))
+                                    Text("查看系列")
+                                        .font(.system(size: 12, weight: .medium))
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color.blue, Color.purple]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .cornerRadius(12)
+                            }
                         }
                         
                         if !currentSticker.notes.isEmpty {
@@ -273,41 +300,27 @@ struct StickerDetailView: View {
                             }
                         }
                         
-                        // 🎯 视频生成按钮（只有AI增强图片上传完成后才显示）
+                        // 🎯 视频生成按钮（AI增强完成后显示，或者视频状态为pending/processing/failed时显示）
                         if let enhancedURL = currentSticker.enhancedSupabaseImageURL, !enhancedURL.isEmpty {
-                            VideoGenerationButton(sticker: currentSticker)
-                                .padding(.horizontal, 20)
+                            let videoStatus = currentSticker.videoGenerationStatus
+                            if videoStatus == .none || videoStatus == .pending || videoStatus == .processing || videoStatus == .failed {
+                                VideoGenerationButton(sticker: currentSticker)
+                                    .padding(.horizontal, 20)
+                            }
                         }
                         
-                        // 查看系列按钮
-                        Button(action: {
-                            showingSeriesView = true
-                        }) {
-                            HStack {
-                                Image(systemName: "cube.box.fill")
-                                Text("查看系列")
-                            }
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [Color.blue, Color.purple]),
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .cornerRadius(16)
-                            .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
+                        // 🎬 视频管理组件（只有视频生成完成后才显示）
+                        if currentSticker.videoGenerationStatus == .completed,
+                           let videoURL = currentSticker.videoURL, !videoURL.isEmpty {
+                            VideoManagementView(sticker: currentSticker)
+                                .padding(.horizontal, 20)
+                                .padding(.top, 8)
                         }
-                        .padding(.horizontal, 20)
                     }
                 }
-                
-                Spacer()
             }
-            .padding(.bottom, 40)
+            
+            Spacer()
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
@@ -330,6 +343,23 @@ struct StickerDetailView: View {
             if let index = todayStickers.firstIndex(where: { $0.id == sticker.id }) {
                 selectedStickerIndex = index
             }
+            
+            // 从贴纸对象中读取用户之前选择的比例
+            selectedAspectRatio = currentSticker.preferredAspectRatio
+            
+            // 🎬 监听视频重新生成通知
+            NotificationCenter.default.addObserver(
+                forName: NSNotification.Name("VideoRegenerationRequested"),
+                object: nil,
+                queue: .main
+            ) { notification in
+                if let userInfo = notification.userInfo,
+                   let stickerID = userInfo["stickerID"] as? String,
+                   stickerID == currentSticker.id.uuidString {
+                    // 当前贴纸的视频被重新生成，刷新界面
+                    print("🔄 收到视频重新生成通知，刷新界面")
+                }
+            }
         }
         .sheet(isPresented: $showingSeriesView) {
             SeriesInfoView(categoryName: currentSticker.categoryName)
@@ -348,6 +378,8 @@ struct StickerDetailView: View {
             AspectRatioSelectionView(
                 selectedAspectRatio: $selectedAspectRatio,
                 onConfirm: {
+                    // 保存用户选择的比例到贴纸对象
+                    currentSticker.preferredAspectRatio = selectedAspectRatio
                     showingCustomPromptInput = true
                 }
             )
@@ -360,7 +392,7 @@ struct StickerDetailView: View {
     // MARK: - 私有方法
     
     /// 触发AI增强
-    private func triggerEnhancement(with prompt: String, using model: AIModel) {
+    private func triggerEnhancement(with prompt: String, using model: AIModel, aspectRatio: String = "1:1") {
         Task {
             isRetryingEnhancement = true
             
@@ -369,7 +401,7 @@ struct StickerDetailView: View {
             currentSticker.aiEnhancementMessage = "准备增强..."
             currentSticker.aiEnhancementProgress = 0.0
             
-            _ = await ImageEnhancementService.shared.enhanceImage(for: currentSticker, customPrompt: prompt, model: model)
+            _ = await ImageEnhancementService.shared.enhanceImage(for: currentSticker, customPrompt: prompt, model: model, aspectRatio: aspectRatio)
             await MainActor.run {
                 isRetryingEnhancement = false
             }
@@ -416,9 +448,9 @@ struct StickerDetailView: View {
     
     /// 重试AI增强（保留原有方法以兼容）
     private func retryEnhancement() {
-        // 使用默认提示词和模型重试
+        // 使用默认提示词和模型重试，但使用用户选择的比例
         let defaultPrompt = PromptManager.shared.getDefaultPrompt()
-        triggerEnhancement(with: defaultPrompt, using: .fluxKontext)
+        triggerEnhancement(with: defaultPrompt, using: .fluxKontext, aspectRatio: selectedAspectRatio)
     }
     
     /// 增强AI

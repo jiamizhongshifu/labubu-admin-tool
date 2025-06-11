@@ -11,6 +11,9 @@ import SwiftData
 @main
 struct jitataApp: App {
     
+    // 🔧 后台任务完成回调
+    @State private var backgroundCompletionHandler: (() -> Void)?
+    
     init() {
         // 🚀 应用启动时加载API配置
         loadAPIConfiguration()
@@ -35,6 +38,16 @@ struct jitataApp: App {
                         print("❌ ModelContainer创建失败: \(error)")
                     }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+                    handleAppDidEnterBackground()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                    handleAppWillEnterForeground()
+                }
+        }
+        .backgroundTask(.appRefresh("background-processing")) {
+            // 🔧 后台应用刷新任务
+            await handleBackgroundAppRefresh()
         }
     }
     
@@ -88,5 +101,48 @@ struct jitataApp: App {
         
         print("❌ 未找到有效的.env文件")
         return nil
+    }
+    
+    // MARK: - 后台任务处理
+    
+    /// 应用进入后台时的处理
+    private func handleAppDidEnterBackground() {
+        print("📱 应用进入后台，保持网络任务继续运行...")
+        
+        // 通知服务应用进入后台状态
+        NotificationCenter.default.post(name: NSNotification.Name("AppDidEnterBackground"), object: nil)
+    }
+    
+    /// 应用即将进入前台时的处理
+    private func handleAppWillEnterForeground() {
+        print("📱 应用即将进入前台，检查后台任务状态...")
+        
+        // 通知服务应用进入前台状态
+        NotificationCenter.default.post(name: NSNotification.Name("AppWillEnterForeground"), object: nil)
+    }
+    
+    /// 后台应用刷新处理
+    private func handleBackgroundAppRefresh() async {
+        print("🔄 执行后台应用刷新任务...")
+        
+        // 检查是否有正在进行的图片增强或视频生成任务
+        let imageEnhancementService = ImageEnhancementService.shared
+        let klingAPIService = KlingAPIService.shared
+        
+        // 给后台任务一些时间完成
+        try? await Task.sleep(nanoseconds: 5_000_000_000) // 5秒
+        
+        print("✅ 后台应用刷新任务完成")
+    }
+    
+    /// 设置后台任务完成回调
+    func setBackgroundCompletionHandler(_ handler: @escaping () -> Void) {
+        backgroundCompletionHandler = handler
+    }
+    
+    /// 调用后台任务完成回调
+    func callBackgroundCompletionHandler() {
+        backgroundCompletionHandler?()
+        backgroundCompletionHandler = nil
     }
 }

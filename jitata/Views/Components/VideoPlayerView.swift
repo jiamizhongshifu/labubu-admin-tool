@@ -253,6 +253,7 @@ struct WallpaperSelectionView: View {
     let currentWallpaperURL: URL?
     let onWallpaperSelected: (URL) -> Void
     let onResetToDefault: () -> Void
+    let onDeleteVideo: (URL) -> Void
     
     @Environment(\.dismiss) private var dismiss
     
@@ -271,6 +272,22 @@ struct WallpaperSelectionView: View {
                             .frame(height: 200)
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                             .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+                        
+                        Text("当前壁纸: \(currentWallpaperURL.lastPathComponent)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding()
+                    .background(Color(.systemGray6))
+                } else {
+                    VStack(spacing: 12) {
+                        Text("当前使用默认壁纸")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        
+                        Text("未设置自定义动态壁纸")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                     .padding()
                     .background(Color(.systemGray6))
@@ -285,14 +302,47 @@ struct WallpaperSelectionView: View {
                         ForEach(videos) { video in
                             WallpaperOptionCard(
                                 video: video,
-                                isSelected: video.url == currentWallpaperURL,
+                                isSelected: isVideoSelected(video),
                                 onTap: {
+                                    print("🎯 ForEach onTap 被触发")
+                                    print("🎯 用户选择壁纸: \(video.title)")
+                                    print("📱 壁纸URL: \(video.url.absoluteString)")
+                                    print("📱 当前壁纸URL: \(currentWallpaperURL?.absoluteString ?? "无")")
+                                    print("🔄 即将调用 onWallpaperSelected")
                                     onWallpaperSelected(video.url)
+                                    print("✅ onWallpaperSelected 调用完成")
+                                    print("🚪 即将关闭页面")
                                     dismiss()
+                                },
+                                onDelete: {
+                                    print("🗑️ 用户删除壁纸: \(video.title)")
+                                    onDeleteVideo(video.url)
+                                    // 如果删除的是当前壁纸，重置为默认
+                                    if video.url == currentWallpaperURL {
+                                        onResetToDefault()
+                                    }
                                 }
                             )
                         }
                     }
+                    .padding()
+                }
+                
+                if videos.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "video.slash")
+                            .font(.system(size: 48))
+                            .foregroundColor(.gray)
+                        
+                        Text("暂无可用的动态视频")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        
+                        Text("请先生成一些动态视频")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding()
                 }
             }
@@ -301,12 +351,14 @@ struct WallpaperSelectionView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("取消") {
+                        print("🚫 用户取消壁纸选择")
                         dismiss()
                     }
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("恢复默认") {
+                        print("🔄 用户点击恢复默认壁纸")
                         onResetToDefault()
                         dismiss()
                     }
@@ -314,6 +366,42 @@ struct WallpaperSelectionView: View {
                 }
             }
         }
+        .onAppear {
+            print("🎬 壁纸选择页面出现")
+            print("📊 可选视频数量: \(videos.count)")
+            print("📱 当前壁纸URL: \(currentWallpaperURL?.absoluteString ?? "无")")
+        }
+    }
+    
+    private func isVideoSelected(_ video: VideoItem) -> Bool {
+        guard let currentURL = currentWallpaperURL else {
+            return false
+        }
+        
+        // 直接URL比较
+        if video.url == currentURL {
+            return true
+        }
+        
+        // 字符串比较（处理可能的URL编码差异）
+        if video.url.absoluteString == currentURL.absoluteString {
+            return true
+        }
+        
+        // 标准化URL比较（移除查询参数和片段）
+        let videoBaseURL = video.url.baseURL ?? video.url
+        let currentBaseURL = currentURL.baseURL ?? currentURL
+        
+        if videoBaseURL.absoluteString == currentBaseURL.absoluteString {
+            return true
+        }
+        
+        print("🔍 URL比较详情:")
+        print("   视频URL: \(video.url.absoluteString)")
+        print("   当前URL: \(currentURL.absoluteString)")
+        print("   是否相等: false")
+        
+        return false
     }
 }
 
@@ -322,15 +410,21 @@ struct WallpaperOptionCard: View {
     let video: VideoItem
     let isSelected: Bool
     let onTap: () -> Void
+    let onDelete: () -> Void
+    
+    @State private var showingDeleteAlert = false
     
     var body: some View {
         VStack(spacing: 8) {
             ZStack {
+                // 视频预览
                 VideoPlayerView(videoURL: video.url)
                     .aspectRatio(9/16, contentMode: .fill)
                     .frame(height: 120)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .disabled(true) // 禁用视频播放器交互
                 
+                // 选中状态覆盖层
                 if isSelected {
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(Color.blue, lineWidth: 3)
@@ -349,6 +443,35 @@ struct WallpaperOptionCard: View {
                     }
                     .frame(height: 120)
                 }
+                
+                // 删除按钮
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            showingDeleteAlert = true
+                        }) {
+                            Image(systemName: "trash.circle.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(.red)
+                                .background(Color.white, in: Circle())
+                        }
+                        .padding(8)
+                    }
+                    Spacer()
+                }
+                .frame(height: 120)
+                
+                // 点击区域
+                Rectangle()
+                    .fill(Color.clear)
+                    .frame(height: 120)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        print("🎯 WallpaperOptionCard 点击区域被触发")
+                        print("🎯 视频标题: \(video.title)")
+                        onTap()
+                    }
             }
             
             Text(video.title)
@@ -356,8 +479,13 @@ struct WallpaperOptionCard: View {
                 .lineLimit(1)
                 .foregroundColor(.primary)
         }
-        .onTapGesture {
-            onTap()
+        .alert("删除壁纸", isPresented: $showingDeleteAlert) {
+            Button("取消", role: .cancel) { }
+            Button("删除", role: .destructive) {
+                onDelete()
+            }
+        } message: {
+            Text("确定要删除这个动态壁纸吗？删除后无法恢复。")
         }
     }
 }

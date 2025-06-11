@@ -29,6 +29,7 @@ class DataManager: ObservableObject {
     /// 加载所有数据
     private func loadData() {
         loadToyStickers()
+        migrateAspectRatioData()
     }
     
     /// 加载所有贴纸
@@ -238,6 +239,43 @@ class DataManager: ObservableObject {
         } catch {
             print("📝 [预上传] ❌ 本地存储失败: \(error)")
         }
+    }
+    
+    // MARK: - 数据迁移功能
+    
+    /// 迁移aspect ratio数据
+    /// 将所有现有贴纸的preferredAspectRatio从"1:1"更新为新的默认值
+    private func migrateAspectRatioData() {
+        guard let context = modelContext else { return }
+        
+        // 检查是否已经执行过迁移
+        let migrationKey = "aspect_ratio_migration_completed"
+        if UserDefaults.standard.bool(forKey: migrationKey) {
+            return
+        }
+        
+        var migratedCount = 0
+        
+        for sticker in toyStickers {
+            if sticker.preferredAspectRatio == "1:1" {
+                sticker.preferredAspectRatio = KlingConfig.defaultAspectRatio
+                migratedCount += 1
+            }
+        }
+        
+        if migratedCount > 0 {
+            do {
+                try context.save()
+                print("📐 已迁移 \(migratedCount) 个贴纸的比例设置为 \(KlingConfig.defaultAspectRatio)")
+            } catch {
+                print("❌ 比例数据迁移失败: \(error)")
+                return
+            }
+        }
+        
+        // 标记迁移完成
+        UserDefaults.standard.set(true, forKey: migrationKey)
+        print("✅ 比例数据迁移完成")
     }
     
     // MARK: - 数据库重置功能

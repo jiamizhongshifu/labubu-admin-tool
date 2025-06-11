@@ -378,24 +378,58 @@ Generate the image immediately.
         }
         
         // 🚀 构造API请求体（根据模型类型）
-        let requestBody: [String: Any]
+        var requestBody: [String: Any]
         
         switch selectedModel {
         case .fluxKontext:
-            // Flux-Kontext Pro API格式 - 需要将图片URL和提示词合并
-            let enhancedPrompt = "\(imageUrl) \(finalPrompt)"
+            // 🔧 检测原图比例并构建智能提示词
+            let originalAspectRatio = detectOriginalImageAspectRatio(from: sticker)
+            let aspectRatioPrompt = buildAspectRatioPrompt(original: originalAspectRatio, target: aspectRatio)
+            
+            // Flux-Kontext Pro API格式 - 需要将图片URL和提示词合并，并明确要求比例
+            let enhancedPrompt: String
+            if originalAspectRatio != aspectRatio {
+                // 当比例不同时，在开头强调比例要求，减弱对原图比例的依赖
+                enhancedPrompt = "严格要求：生成\(aspectRatioPrompt.trimmingCharacters(in: .whitespaces))的图像。参考图像：\(imageUrl) 基于参考图像的内容：\(finalPrompt)"
+            } else {
+                // 比例相同时，正常处理
+                enhancedPrompt = "\(imageUrl) \(finalPrompt)\(aspectRatioPrompt)"
+            }
+            
+            logProgress(for: sticker, "📐 检测到原图比例: \(originalAspectRatio), 目标比例: \(aspectRatio)")
+            if !aspectRatioPrompt.isEmpty {
+                logProgress(for: sticker, "📝 添加比例调整提示: \(aspectRatioPrompt)")
+            }
+            
+            // 🔧 根据kontext.md文档：当需要改变比例时，不传递aspect_ratio参数
             requestBody = [
                 "model": selectedModel.rawValue,
                 "prompt": enhancedPrompt,
-                "aspect_ratio": aspectRatio,           // 🎯 使用用户选择的比例
                 "output_format": "png",          // PNG格式
                 "output_quality": 95,            // 高质量输出
                 "safety_tolerance": 2,           // 安全容忍度
                 "prompt_upsampling": false,      // 不进行提示上采样
                 "num_inference_steps": 28,       // 推理步数（提高质量）
                 "guidance_scale": 3.5,           // 引导比例（保持细节）
-                "seed": -1                       // 随机种子
+                "seed": -1,                      // 随机种子
+                "n": 1,                          // 生成图片数量
+                "response_format": "url"         // 响应格式
             ]
+            
+            // 🎯 智能决定是否传递aspect_ratio参数
+            if originalAspectRatio == aspectRatio {
+                // 比例相同，不传递aspect_ratio参数（保持原图比例）
+                logProgress(for: sticker, "📐 比例相同，不传递aspect_ratio参数，保持原图比例")
+            } else {
+                // 比例不同，传递aspect_ratio参数指定新比例
+                requestBody["aspect_ratio"] = aspectRatio
+                logProgress(for: sticker, "📐 比例不同，传递aspect_ratio参数: \(aspectRatio)")
+                
+                // 🔧 同时添加size参数来强制指定尺寸
+                let sizeString = aspectRatioToSize(aspectRatio)
+                requestBody["size"] = sizeString
+                logProgress(for: sticker, "📐 同时设置size参数: \(sizeString)")
+            }
             
         case .gpt4Vision:
             // GPT-4 Vision API格式（根据 gpt.md 文档）- 使用本地图片转base64
@@ -526,6 +560,17 @@ Generate the image immediately.
             if let enhancedPrompt = (requestBody["prompt"] as? String) {
                 logProgress(for: sticker, "📝 发送的完整提示词长度: \(enhancedPrompt.count) 字符")
                 logProgress(for: sticker, "📝 完整提示词内容: \(enhancedPrompt)")
+            }
+            // 🔍 调试aspect_ratio参数
+            if let aspectRatioValue = requestBody["aspect_ratio"] as? String {
+                logProgress(for: sticker, "📐 发送的aspect_ratio参数: \(aspectRatioValue)")
+            } else {
+                logProgress(for: sticker, "❌ aspect_ratio参数缺失或类型错误")
+            }
+            // 🔍 调试完整请求体参数
+            logProgress(for: sticker, "📋 完整请求体参数:")
+            for (key, value) in requestBody {
+                logProgress(for: sticker, "  - \(key): \(value)")
             }
         case .gpt4Vision:
             // 🔧 详细调试GPT-4 Vision请求体结构
@@ -1540,6 +1585,83 @@ Generate the image immediately.
             return result
         }
     }
+    
+    // MARK: - 比例检测和提示词构建辅助方法
+    
+    /// 检测原图的宽高比
+    private func detectOriginalImageAspectRatio(from sticker: ToySticker) -> String {
+        guard let image = sticker.processedImage else { 
+            logProgress(for: sticker, "⚠️ 无法获取原图，默认使用1:1比例")
+            return "1:1" 
+        }
+        
+        let width = image.size.width
+        let height = image.size.height
+        let ratio = width / height
+        
+        logProgress(for: sticker, "📐 原图尺寸: \(width) x \(height), 比例: \(ratio)")
+        
+        // 根据比例判断最接近的标准比例
+        if abs(ratio - 1.0) < 0.1 { return "1:1" }
+        if abs(ratio - 16.0/9.0) < 0.1 { return "16:9" }
+        if abs(ratio - 9.0/16.0) < 0.1 { return "9:16" }
+        if abs(ratio - 4.0/3.0) < 0.1 { return "4:3" }
+        if abs(ratio - 3.0/4.0) < 0.1 { return "3:4" }
+        if abs(ratio - 21.0/9.0) < 0.1 { return "21:9" }
+        if abs(ratio - 9.0/21.0) < 0.1 { return "9:21" }
+        if abs(ratio - 3.0/2.0) < 0.1 { return "3:2" }
+        if abs(ratio - 2.0/3.0) < 0.1 { return "2:3" }
+        
+        // 默认返回1:1
+        logProgress(for: sticker, "📐 未匹配到标准比例，默认使用1:1")
+        return "1:1"
+    }
+    
+    /// 构建比例调整提示词
+    private func buildAspectRatioPrompt(original: String, target: String) -> String {
+        if original == target {
+            return "" // 比例相同，不需要额外提示
+        }
+        
+        let aspectRatioInstructions: [String: String] = [
+            "1:1": "正方形比例",
+            "16:9": "宽屏横向比例",
+            "9:16": "竖屏手机比例", 
+            "4:3": "标准横向比例",
+            "3:4": "标准竖向比例",
+            "21:9": "超宽屏比例",
+            "9:21": "超长竖屏比例",
+            "3:2": "经典横向比例",
+            "2:3": "经典竖向比例"
+        ]
+        
+        let targetDescription = aspectRatioInstructions[target] ?? target
+        return " 请将图像调整为\(targetDescription)(\(target))，确保内容完整且构图合理。重要：必须严格按照\(target)的宽高比例生成图像。"
+    }
+    
+    // 🔧 将aspect_ratio转换为具体的size字符串
+    private func aspectRatioToSize(_ aspectRatio: String) -> String {
+        switch aspectRatio {
+        case "1:1":
+            return "1024x1024"
+        case "16:9":
+            return "1024x576"
+        case "9:16":
+            return "576x1024"
+        case "4:3":
+            return "1024x768"
+        case "3:4":
+            return "768x1024"
+        case "21:9":
+            return "1024x439"
+        case "9:21":
+            return "439x1024"
+        default:
+            return "1024x1024"
+        }
+    }
+    
+    // 🔧 检测原图比例
 }
 
 // MARK: - UIImage Extension
