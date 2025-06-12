@@ -1,0 +1,360 @@
+{
+  "series": [
+    {
+      "name": "经典系列",
+      "name_en": "Classic Series",
+      "description": "Labubu的经典造型系列，包含最受欢迎的基础款式",
+      "release_year": 2019,
+      "total_models": 12,
+      "theme": "classic",
+      "totalVariants": 12
+    },
+    {
+      "name": "梦幻系列",
+      "name_en": "Dream Series",
+      "description": "梦幻主题的特别版本，色彩丰富，造型可爱",
+      "release_year": 2020,
+      "total_models": 8,
+      "theme": "fantasy",
+      "totalVariants": 8
+    },
+    {
+      "name": "节日系列",
+      "name_en": "Festival Series",
+      "description": "节日限定版本，包含春节、圣诞节等主题",
+      "release_year": 2021,
+      "total_models": 6,
+      "theme": "festival",
+      "totalVariants": 6
+    },
+    {
+      "name": "艺术家合作系列",
+      "name_en": "Artist Collaboration",
+      "description": "与知名艺术家合作的限量版，具有收藏价值",
+      "release_year": 2022,
+      "total_models": 4,
+      "theme": "collaboration",
+      "totalVariants": 4
+    }
+  ],
+  "models": [
+    {
+      "series_name": "经典系列",
+      "name": "经典粉色Labubu",
+      "name_en": "Classic Pink Labubu",
+      "model_number": "LB-CL-001",
+      "description": "经典粉色造型，最受欢迎的版本之一，温和可爱的表情",
+      "rarity_level": "common",
+      "estimated_price_min": 89.00,
+      "estimated_price_max": 150.00,
+      "release_date": "2019-03-15",
+      "original_price": 89.00,
+      "reference_images": [
+        {
+          "url": "https://example.com/images/labubu/LB-CL-001/official.jpg",
+          "type": "official_front",
+          "description": "官方正面图片",
+          "is_primary": true,
+          "quality_score": 0.95
+        },
+        {
+          "url": "https://example.com/images/labubu/LB-CL-001/user_photo.jpg",
+          "type": "user_photo",
+          "description": "用户实拍图片",
+          "is_primary": false,
+          "quality_score": 0.8
+        }
+      ],
+      "visual_features": {
+        "dominant_colors": ["#FFB6C1", "#FFFFFF", "#000000"],
+        "body_shape": "圆润",
+        "head_shape": "圆形",
+        "ear_type": "尖耳",
+        "surface_texture": "光滑",
+        "pattern_type": "纯色",
+        "height_cm": 6.5,
+        "width_cm": 4.2,
+        "depth_cm": 3.8,
+        "special_marks": "粉色主体，白色肚子，黑色眼睛和嘴巴",
+        "feature_vector": [0.85, 0.12, 0.73, 0.45, 0.91, 0.33, 0.67, 0.28, 0.54, 0.76]
+      }
+    },
+    {
+      "series_name": "经典系列",
+      "name": "经典蓝色Labubu",
+      "name_en": "Classic Blue Labubu",
+      "model_number": "LB-CL-002",
+      "description": "经典蓝色造型，温和可爱，深受收藏家喜爱",
+      "rarity_level": "common",
+      "estimated_price_min": 89.00,
+      "estimated_price_max": 150.00,
+      "release_date": "2019-03-15",
+      "original_price": 89.00,
+      "reference_images": [
+        {
+          "url": "https://example.com/images/labubu/LB-CL-002/front.jpg",
+          "type": "official_front",
+          "description": "正面官方图片"
+        },
+        {
+          "url": "https://example.com/images/labubu/LB-CL-002/side.jpg",
+          "type": "official_side",
+          "description": "侧面官方图片"
+        },
+        {
+          "url": "https://example.com/images/labubu/LB-CL-002/back.jpg",
+          "type": "official_back",
+          "description": "背面官方图片"
+        }
+      ],
+      "visual_features": {
+        "dominant_colors": ["#87CEEB", "#FFFFFF", "#000000"],
+        "body_shape": "圆润",
+        "head_shape": "圆形",
+        "ear_type": "尖耳",
+        "surface_texture": "光滑",
+        "pattern_type": "纯色",
+        "height_cm": 6.5,
+        "width_cm": 4.2,
+        "depth_cm": 3.8,
+        "special_marks": "蓝色主体，白色肚子，黑色眼睛和嘴巴",
+        "feature_vector": [0.23, 0.87, 0.45, 0.91, 0.12, 0.76, 0.33, 0.58, 0.67, 0.29]
+      }
+    },
+    {
+      "series_name": "经典系列",
+      "name": "经典黄色Labubu",
+      "name_en": "Classic Yellow Labubu",
+      "model_number": "LB-CL-003",
+      "description": "经典黄色造型，阳光活泼，适合新手收藏",
+      "rarity_level": "common",
+      "estimated_price_min": 89.00,
+      "estimated_price_max": 150.00,
+      "release_date": "2019-03-15",
+      "original_price": 89.00,
+      "reference_images": [
+        {
+          "url": "https://example.com/images/labubu/LB-CL-003/front.jpg",
+          "type": "official_front",
+          "description": "正面官方图片"
+        },
+        {
+          "url": "https://example.com/images/labubu/LB-CL-003/side.jpg",
+          "type": "official_side",
+          "description": "侧面官方图片"
+        }
+      ],
+      "visual_features": {
+        "dominant_colors": ["#FFD700", "#FFFFFF", "#000000"],
+        "body_shape": "圆润",
+        "head_shape": "圆形",
+        "ear_type": "尖耳",
+        "surface_texture": "光滑",
+        "pattern_type": "纯色",
+        "height_cm": 6.5,
+        "width_cm": 4.2,
+        "depth_cm": 3.8,
+        "special_marks": "黄色主体，白色肚子，黑色眼睛和嘴巴",
+        "feature_vector": [0.91, 0.76, 0.23, 0.45, 0.87, 0.12, 0.58, 0.33, 0.67, 0.29]
+      }
+    },
+    {
+      "series_name": "梦幻系列",
+      "name": "彩虹Labubu",
+      "name_en": "Rainbow Labubu",
+      "model_number": "LB-DR-001",
+      "description": "彩虹色渐变设计，梦幻系列的代表作品",
+      "rarity_level": "rare",
+      "estimated_price_min": 180.00,
+      "estimated_price_max": 280.00,
+      "release_date": "2020-06-01",
+      "original_price": 180.00,
+      "reference_images": [
+        {
+          "url": "https://example.com/images/labubu/LB-DR-001/front.jpg",
+          "type": "official_front",
+          "description": "正面官方图片"
+        },
+        {
+          "url": "https://example.com/images/labubu/LB-DR-001/rainbow_detail.jpg",
+          "type": "detail",
+          "description": "彩虹渐变细节图"
+        }
+      ],
+      "visual_features": {
+        "dominant_colors": ["#FF0000", "#FF7F00", "#FFFF00", "#00FF00", "#0000FF", "#4B0082", "#9400D3"],
+        "body_shape": "圆润",
+        "head_shape": "圆形",
+        "ear_type": "尖耳",
+        "surface_texture": "光滑",
+        "pattern_type": "渐变",
+        "height_cm": 6.5,
+        "width_cm": 4.2,
+        "depth_cm": 3.8,
+        "special_marks": "彩虹渐变色，从头到脚呈现七彩效果",
+        "feature_vector": [0.45, 0.23, 0.91, 0.76, 0.12, 0.87, 0.33, 0.67, 0.58, 0.29]
+      }
+    },
+    {
+      "series_name": "节日系列",
+      "name": "圣诞Labubu",
+      "name_en": "Christmas Labubu",
+      "model_number": "LB-FE-001",
+      "description": "圣诞节限定版，戴着圣诞帽的可爱造型",
+      "rarity_level": "ultra_rare",
+      "estimated_price_min": 350.00,
+      "estimated_price_max": 500.00,
+      "release_date": "2021-12-01",
+      "original_price": 350.00,
+      "reference_images": [
+        {
+          "url": "https://example.com/images/labubu/LB-FE-001/front.jpg",
+          "type": "official_front",
+          "description": "正面官方图片"
+        },
+        {
+          "url": "https://example.com/images/labubu/LB-FE-001/hat_detail.jpg",
+          "type": "detail",
+          "description": "圣诞帽细节图"
+        }
+      ],
+      "visual_features": {
+        "dominant_colors": ["#DC143C", "#FFFFFF", "#228B22"],
+        "body_shape": "圆润",
+        "head_shape": "圆形",
+        "ear_type": "尖耳",
+        "surface_texture": "光滑",
+        "pattern_type": "节日主题",
+        "height_cm": 7.0,
+        "width_cm": 4.5,
+        "depth_cm": 4.0,
+        "special_marks": "红色圣诞帽，绿色围巾，白色雪花装饰",
+        "accessories": ["圣诞帽", "围巾", "雪花装饰"],
+        "feature_vector": [0.76, 0.45, 0.12, 0.91, 0.23, 0.87, 0.67, 0.33, 0.58, 0.29]
+      }
+    },
+    {
+      "series_name": "艺术家合作系列",
+      "name": "金色限量Labubu",
+      "name_en": "Golden Limited Labubu",
+      "model_number": "LB-AR-001",
+      "description": "与知名艺术家合作的金色限量版，全球限量1000只",
+      "rarity_level": "secret",
+      "estimated_price_min": 800.00,
+      "estimated_price_max": 1500.00,
+      "release_date": "2022-10-01",
+      "original_price": 800.00,
+      "reference_images": [
+        {
+          "url": "https://example.com/images/labubu/LB-AR-001/front.jpg",
+          "type": "official_front",
+          "description": "正面官方图片"
+        },
+        {
+          "url": "https://example.com/images/labubu/LB-AR-001/gold_detail.jpg",
+          "type": "detail",
+          "description": "金色电镀细节图"
+        },
+        {
+          "url": "https://example.com/images/labubu/LB-AR-001/certificate.jpg",
+          "type": "certificate",
+          "description": "限量证书"
+        }
+      ],
+      "visual_features": {
+        "dominant_colors": ["#FFD700", "#FFA500", "#000000"],
+        "body_shape": "圆润",
+        "head_shape": "圆形",
+        "ear_type": "尖耳",
+        "surface_texture": "金属光泽",
+        "pattern_type": "金属质感",
+        "height_cm": 6.8,
+        "width_cm": 4.3,
+        "depth_cm": 3.9,
+        "special_marks": "全身金色电镀，底部有限量编号",
+        "accessories": ["限量证书", "特制包装盒"],
+        "feature_vector": [0.91, 0.87, 0.76, 0.45, 0.23, 0.12, 0.67, 0.58, 0.33, 0.29]
+      }
+    }
+  ],
+  "price_history": [
+    {
+      "model_number": "LB-CL-001",
+      "price": 120.00,
+      "currency": "CNY",
+      "source": "taobao",
+      "condition": "new",
+      "date": "2024-12-01"
+    },
+    {
+      "model_number": "LB-CL-001",
+      "price": 95.00,
+      "currency": "CNY",
+      "source": "xianyu",
+      "condition": "used",
+      "date": "2024-12-05"
+    },
+    {
+      "model_number": "LB-DR-001",
+      "price": 220.00,
+      "currency": "CNY",
+      "source": "official",
+      "condition": "new",
+      "date": "2024-11-15"
+    },
+    {
+      "model_number": "LB-FE-001",
+      "price": 420.00,
+      "currency": "CNY",
+      "source": "official",
+      "condition": "new",
+      "date": "2024-12-01"
+    },
+    {
+      "model_number": "LB-AR-001",
+      "price": 1200.00,
+      "currency": "CNY",
+      "source": "official",
+      "condition": "new",
+      "date": "2024-10-01"
+    }
+  ],
+  "recognition_tags": [
+    {
+      "model_number": "LB-CL-001",
+      "tag_type": "color",
+      "tag_value": "pink",
+      "confidence": 0.95
+    },
+    {
+      "model_number": "LB-CL-001",
+      "tag_type": "shape",
+      "tag_value": "round",
+      "confidence": 0.90
+    },
+    {
+      "model_number": "LB-CL-002",
+      "tag_type": "color",
+      "tag_value": "blue",
+      "confidence": 0.95
+    },
+    {
+      "model_number": "LB-DR-001",
+      "tag_type": "pattern",
+      "tag_value": "rainbow",
+      "confidence": 0.98
+    },
+    {
+      "model_number": "LB-FE-001",
+      "tag_type": "accessory",
+      "tag_value": "christmas_hat",
+      "confidence": 0.92
+    },
+    {
+      "model_number": "LB-AR-001",
+      "tag_type": "color",
+      "tag_value": "gold",
+      "confidence": 0.99
+    }
+  ]
+} 

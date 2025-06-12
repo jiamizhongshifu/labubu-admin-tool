@@ -513,7 +513,7 @@ extension KlingAPIService: URLSessionDelegate, URLSessionDataDelegate {
         }
     }
     
-    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didCompleteWithError error: Error?) {
+    private func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didCompleteWithError error: Error?) {
         let taskIdentifier = "\(dataTask.taskIdentifier)"
         print("🏁 请求完成 - 任务ID: \(taskIdentifier)")
         

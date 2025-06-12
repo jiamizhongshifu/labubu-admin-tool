@@ -27,6 +27,9 @@ struct StickerDetailView: View {
     @State private var showingAspectRatioSelection = false
     @State private var selectedAspectRatio = KlingConfig.defaultAspectRatio
     @State private var showingBackgroundRemoval = false
+    @State private var showingLabubuRecognition = false
+    @State private var labubuRecognitionResult: LabubuRecognitionResult?
+    @StateObject private var labubuService = LabubuRecognitionService.shared
     
     // 获取当天收集的贴纸（最新的在最左边）
     var todayStickers: [ToySticker] {
@@ -51,278 +54,14 @@ struct StickerDetailView: View {
             VStack(spacing: 0) {
                 // 当天收集的潮玩小图横向滚动
                 if todayStickers.count > 1 {
-                    ScrollViewReader { proxy in
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
-                                ForEach(Array(todayStickers.enumerated()), id: \.element.id) { index, daySticker in
-                                    ThumbnailView(
-                                        sticker: daySticker,
-                                        isSelected: index == selectedStickerIndex
-                                    )
-                                    .id(index) // 为每个缩略图添加ID
-                                    .onTapGesture {
-                                        HapticFeedbackManager.shared.lightTap()
-                                        withAnimation(.easeInOut(duration: 0.3)) {
-                                            selectedStickerIndex = index
-                                        }
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 20)
-                        }
-                        .padding(.top, 20)
-                        .padding(.bottom, 30)
-                        .onChange(of: selectedStickerIndex) { _, newIndex in
-                            // 当选中索引变化时，自动滚动到相应位置
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                proxy.scrollTo(newIndex, anchor: .center)
-                            }
-                        }
-                    }
+                    thumbnailScrollView
                 }
                 
                 // 中间区域 - 大图展示和左右滑动
-                TabView(selection: $selectedStickerIndex) {
-                    ForEach(Array(todayStickers.enumerated()), id: \.element.id) { index, daySticker in
-                        LargeImageView(sticker: daySticker) {
-                            // 点击查看大图
-                            showingFullScreenImage = true
-                        }
-                        .tag(index)
-                    }
-                }
-                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
-                .frame(height: 350)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
+                mainImageTabView
                 
                 // 底部区域 - 潮玩信息和操作按钮
-                VStack(spacing: 16) {
-                    // 潮玩基本信息
-                    VStack(spacing: 12) {
-                        HStack {
-                            Text(currentSticker.name)
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.primary)
-                            
-                            // AI增强状态指示器
-                            AIEnhancementStatusIndicator(sticker: currentSticker)
-                        }
-                        
-                        HStack {
-                            HStack {
-                                Image(systemName: "tag.fill")
-                                    .foregroundColor(.blue)
-                                Text(currentSticker.categoryName)
-                                    .font(.subheadline)
-                                    .foregroundColor(.blue)
-                            }
-                            
-                            Spacer()
-                            
-                            // 简化的查看系列按钮
-                            Button(action: {
-                                HapticFeedbackManager.shared.lightTap()
-                                showingSeriesView = true
-                            }) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "cube.box.fill")
-                                        .font(.system(size: 12))
-                                    Text("查看系列")
-                                        .font(.system(size: 12, weight: .medium))
-                                }
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [Color.blue, Color.purple]),
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .cornerRadius(12)
-                            }
-                        }
-                        
-                        if !currentSticker.notes.isEmpty {
-                            Text(currentSticker.notes)
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                                .lineLimit(3)
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    
-                    // 预存储状态指示器
-                    if let storedURL = currentSticker.supabaseImageURL, !storedURL.isEmpty {
-                        HStack {
-                            if storedURL.hasPrefix("file://") {
-                                // 本地存储指示器
-                                Image(systemName: "internaldrive.fill")
-                                    .foregroundColor(.blue)
-                                    .font(.system(size: 12))
-                                Text("图片已预存储到本地")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(.secondary)
-                            } else {
-                                // 云端存储指示器
-                                Image(systemName: "cloud.fill")
-                                    .foregroundColor(.green)
-                                    .font(.system(size: 12))
-                                Text("图片已预上传到云端")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(storedURL.hasPrefix("file://") ? .blue : .green)
-                                .font(.system(size: 12))
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 4)
-                    }
-                    
-                    // 图片切换按钮（仅在有增强图片时显示）
-                    if currentSticker.hasEnhancedImage {
-                        Button(action: {
-                            HapticFeedbackManager.shared.lightTap()
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                currentSticker.toggleImageDisplay()
-                            }
-                        }) {
-                            HStack {
-                                Image(systemName: currentSticker.isShowingEnhancedImage ? "photo" : "sparkles")
-                                    .font(.system(size: 14, weight: .medium))
-                                Text("当前显示：\(currentSticker.currentImageTypeDescription)")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                Image(systemName: "arrow.triangle.2.circlepath")
-                                    .font(.system(size: 12))
-                            }
-                            .foregroundColor(.blue)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(
-                                RoundedRectangle(cornerRadius: 20)
-                                    .fill(Color.blue.opacity(0.1))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 20)
-                                            .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-                                    )
-                            )
-                        }
-                        .transition(.opacity.combined(with: .scale))
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 8)
-                    }
-                    
-                    // 操作按钮区域
-                    VStack(spacing: 12) {
-                        // AI增强按钮（未增强或可以重新增强时显示）
-                        if currentSticker.aiEnhancementStatus != .processing {
-                            Button(action: {
-                                HapticFeedbackManager.shared.lightTap()
-                                showingAspectRatioSelection = true
-                            }) {
-                                HStack {
-                                    if currentSticker.aiEnhancementStatus == .processing || isRetryingEnhancement {
-                                        ProgressView()
-                                            .scaleEffect(0.8)
-                                            .foregroundColor(.white)
-                                    } else {
-                                        Image(systemName: currentSticker.aiEnhancementStatus == .completed ? "sparkles" : "wand.and.stars")
-                                    }
-                                    Text(getEnhancementButtonText())
-                                }
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: getEnhancementButtonColors()),
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .cornerRadius(12)
-                                .shadow(color: getEnhancementButtonColors()[0].opacity(0.3), radius: 6, x: 0, y: 3)
-                            }
-                            .disabled(currentSticker.aiEnhancementStatus == .processing || isRetryingEnhancement)
-                            .padding(.horizontal, 20)
-                        }
-                        
-                        // AI增强进度提示和取消按钮（处理中时显示）
-                        if currentSticker.aiEnhancementStatus == .processing {
-                            VStack(spacing: 12) {
-                                // 简化的进度提示
-                                VStack(spacing: 8) {
-                                    HStack {
-                                        Image(systemName: "brain.head.profile")
-                                            .font(.system(size: 16))
-                                            .foregroundColor(.blue)
-                                        
-                                        Text(currentSticker.aiEnhancementMessage)
-                                            .font(.subheadline)
-                                            .foregroundColor(.secondary)
-                                        
-                                        Spacer()
-                                    }
-                                    
-                                    ProgressView(value: currentSticker.aiEnhancementProgress)
-                                        .progressViewStyle(LinearProgressViewStyle(tint: .blue))
-                                        .scaleEffect(y: 1.5)
-                                }
-                                .padding(.horizontal, 20)
-                                
-                                // 取消增强按钮
-                                Button(action: {
-                                    HapticFeedbackManager.shared.lightTap()
-                                    cancelEnhancement()
-                                }) {
-                                    HStack {
-                                        Image(systemName: "xmark.circle.fill")
-                                        Text("取消增强")
-                                    }
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .background(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [Color.red, Color.orange]),
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    )
-                                    .cornerRadius(12)
-                                    .shadow(color: Color.red.opacity(0.3), radius: 6, x: 0, y: 3)
-                                }
-                                .padding(.horizontal, 20)
-                            }
-                        }
-                        
-                        // 🎯 视频生成按钮（AI增强完成后显示，或者视频状态为pending/processing/failed时显示）
-                        if let enhancedURL = currentSticker.enhancedSupabaseImageURL, !enhancedURL.isEmpty {
-                            let videoStatus = currentSticker.videoGenerationStatus
-                            if videoStatus == .none || videoStatus == .pending || videoStatus == .processing || videoStatus == .failed {
-                                VideoGenerationButton(sticker: currentSticker)
-                                    .padding(.horizontal, 20)
-                            }
-                        }
-                        
-                        // 🎬 视频管理组件（只有视频生成完成后才显示）
-                        if currentSticker.videoGenerationStatus == .completed,
-                           let videoURL = currentSticker.videoURL, !videoURL.isEmpty {
-                            VideoManagementView(sticker: currentSticker)
-                                .padding(.horizontal, 20)
-                                .padding(.top, 8)
-                        }
-                    }
-                }
+                bottomContentView
             }
             
             Spacer()
@@ -392,6 +131,11 @@ struct StickerDetailView: View {
         .fullScreenCover(isPresented: $showingFullScreenImage) {
             FullScreenImageView(sticker: currentSticker, isPresented: $showingFullScreenImage)
         }
+        .sheet(isPresented: $showingLabubuRecognition) {
+            if let result = labubuRecognitionResult {
+                LabubuFamilyTreeView(recognitionResult: result)
+            }
+        }
     }
     
     // MARK: - 私有方法
@@ -445,6 +189,311 @@ struct StickerDetailView: View {
         }
     }
     
+    // MARK: - 子视图
+    
+    private var thumbnailScrollView: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(Array(todayStickers.enumerated()), id: \.element.id) { index, daySticker in
+                        ThumbnailView(
+                            sticker: daySticker,
+                            isSelected: index == selectedStickerIndex
+                        )
+                        .id(index)
+                        .onTapGesture {
+                            HapticFeedbackManager.shared.lightTap()
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                selectedStickerIndex = index
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+            .padding(.top, 20)
+            .padding(.bottom, 30)
+            .onChange(of: selectedStickerIndex) { _, newIndex in
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    proxy.scrollTo(newIndex, anchor: .center)
+                }
+            }
+        }
+    }
+    
+    private var mainImageTabView: some View {
+        TabView(selection: $selectedStickerIndex) {
+            ForEach(Array(todayStickers.enumerated()), id: \.element.id) { index, daySticker in
+                LargeImageView(sticker: daySticker) {
+                    showingFullScreenImage = true
+                }
+                .tag(index)
+            }
+        }
+        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+        .frame(height: 350)
+        .padding(.horizontal, 20)
+        .padding(.bottom, 20)
+    }
+    
+    private var bottomContentView: some View {
+        VStack(spacing: 16) {
+            stickerInfoView
+            storageStatusView
+            imageToggleButton
+            actionButtonsView
+        }
+    }
+    
+    private var stickerInfoView: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text(currentSticker.name)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+                
+                AIEnhancementStatusIndicator(sticker: currentSticker)
+            }
+            
+            HStack {
+                HStack {
+                    Image(systemName: "tag.fill")
+                        .foregroundColor(.blue)
+                    Text(currentSticker.categoryName)
+                        .font(.subheadline)
+                        .foregroundColor(.blue)
+                }
+                
+                Spacer()
+                
+                Button(action: {
+                    HapticFeedbackManager.shared.lightTap()
+                    showingSeriesView = true
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "cube.box.fill")
+                            .font(.system(size: 12))
+                        Text("查看系列")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(
+                        LinearGradient(
+                            gradient: Gradient(colors: [Color.blue, Color.purple]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(12)
+                }
+            }
+            
+            if !currentSticker.notes.isEmpty {
+                Text(currentSticker.notes)
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(3)
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+    
+    private var storageStatusView: some View {
+        Group {
+            if let storedURL = currentSticker.supabaseImageURL, !storedURL.isEmpty {
+                HStack {
+                    if storedURL.hasPrefix("file://") {
+                        Image(systemName: "internaldrive.fill")
+                            .foregroundColor(.blue)
+                            .font(.system(size: 12))
+                        Text("图片已预存储到本地")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+                    } else {
+                        Image(systemName: "cloud.fill")
+                            .foregroundColor(.green)
+                            .font(.system(size: 12))
+                        Text("图片已预上传到云端")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(storedURL.hasPrefix("file://") ? .blue : .green)
+                        .font(.system(size: 12))
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 4)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var imageToggleButton: some View {
+        if currentSticker.hasEnhancedImage {
+            Button(action: {
+                HapticFeedbackManager.shared.lightTap()
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    currentSticker.toggleImageDisplay()
+                }
+            }) {
+                HStack {
+                    Image(systemName: currentSticker.isShowingEnhancedImage ? "photo" : "sparkles")
+                        .font(.system(size: 14, weight: .medium))
+                    Text("当前显示：\(currentSticker.currentImageTypeDescription)")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 12))
+                }
+                .foregroundColor(.blue)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color.blue.opacity(0.1))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                        )
+                )
+            }
+            .transition(.opacity.combined(with: .scale))
+            .padding(.horizontal, 20)
+            .padding(.bottom, 8)
+        }
+    }
+    
+    private var actionButtonsView: some View {
+        VStack(spacing: 12) {
+            labubuRecognitionButtonView
+            aiEnhancementButtonView
+            aiEnhancementProgressView
+            videoGenerationButtonView
+            videoManagementView
+        }
+    }
+    
+    private var labubuRecognitionButtonView: some View {
+        LabubuRecognitionButton(image: currentSticker.processedImage ?? UIImage()) { result in
+            // 识别完成后的回调
+            labubuRecognitionResult = result
+            showingLabubuRecognition = true
+        }
+        .padding(.horizontal, 20)
+    }
+    
+    @ViewBuilder
+    private var aiEnhancementButtonView: some View {
+        if currentSticker.aiEnhancementStatus != .processing {
+            Button(action: {
+                HapticFeedbackManager.shared.lightTap()
+                showingAspectRatioSelection = true
+            }) {
+                HStack {
+                    if currentSticker.aiEnhancementStatus == .processing || isRetryingEnhancement {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .foregroundColor(.white)
+                    } else {
+                        Image(systemName: currentSticker.aiEnhancementStatus == .completed ? "sparkles" : "wand.and.stars")
+                    }
+                    Text(getEnhancementButtonText())
+                }
+                .font(.headline)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: getEnhancementButtonColors()),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(12)
+                .shadow(color: getEnhancementButtonColors()[0].opacity(0.3), radius: 6, x: 0, y: 3)
+            }
+            .disabled(currentSticker.aiEnhancementStatus == .processing || isRetryingEnhancement)
+            .padding(.horizontal, 20)
+        }
+    }
+    
+    @ViewBuilder
+    private var aiEnhancementProgressView: some View {
+        if currentSticker.aiEnhancementStatus == .processing {
+            VStack(spacing: 12) {
+                VStack(spacing: 8) {
+                    HStack {
+                        Image(systemName: "brain.head.profile")
+                            .font(.system(size: 16))
+                            .foregroundColor(.blue)
+                        
+                        Text(currentSticker.aiEnhancementMessage)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                    }
+                    
+                    ProgressView(value: currentSticker.aiEnhancementProgress)
+                        .progressViewStyle(LinearProgressViewStyle(tint: .blue))
+                        .scaleEffect(y: 1.5)
+                }
+                .padding(.horizontal, 20)
+                
+                Button(action: {
+                    HapticFeedbackManager.shared.lightTap()
+                    cancelEnhancement()
+                }) {
+                    HStack {
+                        Image(systemName: "xmark.circle.fill")
+                        Text("取消增强")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        LinearGradient(
+                            gradient: Gradient(colors: [Color.red, Color.orange]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(12)
+                    .shadow(color: Color.red.opacity(0.3), radius: 6, x: 0, y: 3)
+                }
+                .padding(.horizontal, 20)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var videoGenerationButtonView: some View {
+        if let enhancedURL = currentSticker.enhancedSupabaseImageURL, !enhancedURL.isEmpty {
+            let videoStatus = currentSticker.videoGenerationStatus
+            if videoStatus == .none || videoStatus == .pending || videoStatus == .processing || videoStatus == .failed {
+                VideoGenerationButton(sticker: currentSticker)
+                    .padding(.horizontal, 20)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var videoManagementView: some View {
+        if currentSticker.videoGenerationStatus == .completed,
+           let videoURL = currentSticker.videoURL, !videoURL.isEmpty {
+            VideoManagementView(sticker: currentSticker)
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+        }
+    }
+    
     /// 取消AI增强
     private func cancelEnhancement() {
         ImageEnhancementService.shared.cancelEnhancement(for: currentSticker)
@@ -474,6 +523,42 @@ struct StickerDetailView: View {
             currentSticker.enhancedImageData = enhancedData
             currentSticker.isShowingEnhancedImage = true
         }
+    }
+    
+    /// 执行Labubu识别
+    private func performLabubuRecognition() {
+        guard let image = currentSticker.processedImage else { return }
+        
+        Task {
+            do {
+                // 使用新的AI识别服务
+                let result = try await LabubuAIRecognitionService.shared.recognizeUserPhoto(image)
+                
+                await MainActor.run {
+                    if result.isSuccessful {
+                        // 保存识别结果到贴纸
+                        currentSticker.labubuInfo = convertToOldFormat(result)
+                        labubuRecognitionResult = convertToOldFormat(result)
+                        showingLabubuRecognition = true
+                    } else {
+                        // 显示未识别提示
+                        print("未识别为Labubu系列")
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    print("Labubu AI识别失败: \(error)")
+                    // 这里可以显示错误提示
+                }
+            }
+        }
+    }
+    
+    /// 将新的AI识别结果转换为旧格式（临时兼容方案）
+    private func convertToOldFormat(_ aiResult: LabubuAIRecognitionResult) -> LabubuRecognitionResult? {
+        // 由于LabubuRecognitionResult结构已简化，这里创建一个兼容的结果
+        // 在实际应用中，应该统一使用新的AI识别结果格式
+        return nil
     }
     
     // 格式化日期

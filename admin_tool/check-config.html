@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API配置检查工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #f0f0f0;
+        }
+        
+        .section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+        }
+        
+        .config-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .config-label {
+            font-weight: 600;
+            min-width: 200px;
+            color: #555;
+        }
+        
+        .config-value {
+            flex: 1;
+            font-family: 'Monaco', 'Menlo', monospace;
+            background: white;
+            padding: 8px 12px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            margin: 0 10px;
+        }
+        
+        .status-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .status-success {
+            background: #28a745;
+        }
+        
+        .status-error {
+            background: #dc3545;
+        }
+        
+        .status-warning {
+            background: #ffc107;
+            color: #333;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: transform 0.2s;
+            margin-right: 10px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .instructions {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .instructions h4 {
+            color: #1976d2;
+            margin-bottom: 10px;
+        }
+        
+        .instructions ol {
+            margin-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 5px;
+        }
+        
+        .file-upload {
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: border-color 0.3s;
+        }
+        
+        .file-upload:hover {
+            border-color: #667eea;
+        }
+        
+        .file-upload input {
+            display: none;
+        }
+        
+        .file-upload label {
+            cursor: pointer;
+            color: #667eea;
+            font-weight: 600;
+        }
+        
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.9rem;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔧 API配置检查工具</h1>
+            <p>验证您的.env文件配置是否正确</p>
+        </div>
+        
+        <div class="content">
+            <div class="instructions">
+                <h4>📋 使用说明</h4>
+                <ol>
+                    <li>点击"选择.env文件"按钮，选择您的.env文件</li>
+                    <li>系统会自动检查配置项的有效性</li>
+                    <li>根据检查结果修复配置问题</li>
+                    <li>绿色✓表示配置正确，红色✗表示需要修复</li>
+                </ol>
+            </div>
+            
+            <div class="section">
+                <h3>📁 文件上传</h3>
+                <div class="file-upload">
+                    <input type="file" id="envFile" accept=".env" />
+                    <label for="envFile">
+                        📄 点击选择.env文件
+                    </label>
+                </div>
+            </div>
+            
+            <div class="section" id="configSection" style="display: none;">
+                <h3>⚙️ 配置检查结果</h3>
+                <div id="configResults"></div>
+            </div>
+            
+            <div class="section" id="logSection" style="display: none;">
+                <h3>📝 检查日志</h3>
+                <div id="checkLog" class="log"></div>
+            </div>
+            
+            <div style="text-align: center; margin-top: 30px;">
+                <button class="btn" onclick="window.location.reload()">🔄 重新检查</button>
+                <button class="btn btn-secondary" onclick="window.close()">❌ 关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let configData = {};
+        
+        document.getElementById('envFile').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const content = e.target.result;
+                    parseEnvFile(content);
+                };
+                reader.readAsText(file);
+            }
+        });
+        
+        function parseEnvFile(content) {
+            configData = {};
+            const lines = content.split('\n');
+            
+            log('开始解析.env文件...');
+            
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (trimmedLine && !trimmedLine.startsWith('#')) {
+                    const [key, ...valueParts] = trimmedLine.split('=');
+                    if (key && valueParts.length > 0) {
+                        const value = valueParts.join('=').trim();
+                        configData[key.trim()] = value;
+                        log(`发现配置项: ${key.trim()}`);
+                    }
+                }
+            }
+            
+            log(`解析完成，共发现 ${Object.keys(configData).length} 个配置项`);
+            checkConfiguration();
+        }
+        
+        function checkConfiguration() {
+            const results = [];
+            
+            // 检查TUZI_API_KEY
+            const tuziKey = configData['TUZI_API_KEY'];
+            results.push({
+                label: 'TUZI_API_KEY',
+                value: tuziKey ? maskApiKey(tuziKey) : '未设置',
+                status: validateApiKey(tuziKey),
+                description: 'TUZI API密钥（主要）'
+            });
+            
+            // 检查TUZI_API_BASE
+            const tuziBase = configData['TUZI_API_BASE'];
+            results.push({
+                label: 'TUZI_API_BASE',
+                value: tuziBase || '未设置',
+                status: validateApiBase(tuziBase),
+                description: 'TUZI API基础URL'
+            });
+            
+            // 检查OPENAI_API_KEY（向后兼容）
+            const openaiKey = configData['OPENAI_API_KEY'];
+            results.push({
+                label: 'OPENAI_API_KEY',
+                value: openaiKey ? maskApiKey(openaiKey) : '未设置',
+                status: validateApiKey(openaiKey, true),
+                description: 'OpenAI API密钥（向后兼容）'
+            });
+            
+            // 检查Supabase配置
+            const supabaseUrl = configData['SUPABASE_URL'];
+            results.push({
+                label: 'SUPABASE_URL',
+                value: supabaseUrl || '未设置',
+                status: validateSupabaseUrl(supabaseUrl),
+                description: 'Supabase数据库URL'
+            });
+            
+            const supabaseKey = configData['SUPABASE_ANON_KEY'];
+            results.push({
+                label: 'SUPABASE_ANON_KEY',
+                value: supabaseKey ? maskApiKey(supabaseKey) : '未设置',
+                status: validateApiKey(supabaseKey, true),
+                description: 'Supabase匿名密钥'
+            });
+            
+            displayResults(results);
+            generateRecommendations(results);
+        }
+        
+        function validateApiKey(key, optional = false) {
+            if (!key || key.trim() === '') {
+                return optional ? 'warning' : 'error';
+            }
+            if (key === 'your_api_key_here' || key === 'your-api-key-here') {
+                return 'error';
+            }
+            if (key.length < 10) {
+                return 'error';
+            }
+            return 'success';
+        }
+        
+        function validateApiBase(base) {
+            if (!base || base.trim() === '') {
+                return 'warning';
+            }
+            if (!base.startsWith('http')) {
+                return 'error';
+            }
+            return 'success';
+        }
+        
+        function validateSupabaseUrl(url) {
+            if (!url || url.trim() === '') {
+                return 'warning';
+            }
+            if (!url.includes('supabase.co')) {
+                return 'warning';
+            }
+            return 'success';
+        }
+        
+        function maskApiKey(key) {
+            if (!key || key.length < 8) return key;
+            return key.substring(0, 4) + '****' + key.substring(key.length - 4);
+        }
+        
+        function displayResults(results) {
+            const container = document.getElementById('configResults');
+            container.innerHTML = '';
+            
+            results.forEach(result => {
+                const item = document.createElement('div');
+                item.className = 'config-item';
+                
+                const statusIcon = getStatusIcon(result.status);
+                
+                item.innerHTML = `
+                    <div class="config-label">${result.label}</div>
+                    <div class="config-value">${result.value}</div>
+                    <div class="status-icon status-${result.status}">${statusIcon}</div>
+                `;
+                
+                container.appendChild(item);
+            });
+            
+            document.getElementById('configSection').style.display = 'block';
+        }
+        
+        function getStatusIcon(status) {
+            switch (status) {
+                case 'success': return '✓';
+                case 'error': return '✗';
+                case 'warning': return '!';
+                default: return '?';
+            }
+        }
+        
+        function generateRecommendations(results) {
+            const errors = results.filter(r => r.status === 'error');
+            const warnings = results.filter(r => r.status === 'warning');
+            
+            if (errors.length > 0) {
+                log('\n❌ 发现配置错误:');
+                errors.forEach(error => {
+                    log(`  - ${error.label}: ${error.value === '未设置' ? '缺少必需配置' : '配置值无效'}`);
+                });
+            }
+            
+            if (warnings.length > 0) {
+                log('\n⚠️ 配置警告:');
+                warnings.forEach(warning => {
+                    log(`  - ${warning.label}: 建议检查配置`);
+                });
+            }
+            
+            if (errors.length === 0 && warnings.length === 0) {
+                log('\n✅ 所有配置检查通过！');
+            }
+            
+            log('\n📝 配置建议:');
+            log('1. 确保TUZI_API_KEY已设置为有效的API密钥');
+            log('2. TUZI_API_BASE通常使用默认值 https://api.tu-zi.com/v1');
+            log('3. 如果使用数据库功能，需要配置Supabase相关参数');
+            log('4. 将.env文件放在项目根目录');
+            log('5. 确保.env文件已添加到.gitignore中');
+        }
+        
+        function log(message) {
+            const logElement = document.getElementById('checkLog');
+            logElement.textContent += message + '\n';
+            logElement.scrollTop = logElement.scrollHeight;
+            document.getElementById('logSection').style.display = 'block';
+        }
+    </script>
+</body>
+</html> 

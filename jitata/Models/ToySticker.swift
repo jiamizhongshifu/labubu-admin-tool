@@ -126,6 +126,13 @@ final class ToySticker: Identifiable {
     var videoDownloadStatus: String = "none"  // 下载状态：none, downloading, completed, failed
     var downloadProgress: Double = 0.0  // 下载进度
     
+    // MARK: - Labubu Recognition Properties
+    var labubuInfoData: Data?  // 存储序列化的Labubu信息
+    var isLabubuVerified: Bool = false  // 是否已验证为Labubu
+    var labubuSeriesId: String?  // 快速访问系列ID
+    var labubuRecognitionConfidence: Double = 0.0  // 识别置信度
+    var labubuRecognitionDate: Date?  // 识别时间
+    
     init(name: String, categoryName: String, originalImage: UIImage, processedImage: UIImage, notes: String = "") {
         self.id = UUID()
         self.name = name
@@ -335,4 +342,53 @@ extension ToySticker {
 
 extension ToySticker {
     static let sampleData: [ToySticker] = []
+}
+
+// MARK: - Labubu Recognition Extension
+extension ToySticker {
+    /// Labubu识别信息（简化版本）
+    var labubuInfo: LabubuRecognitionResult? {
+        get {
+            // 由于LabubuRecognitionResult不再支持Codable，我们暂时返回nil
+            // 在简化的架构中，识别结果不需要持久化存储
+            return nil
+        }
+        set {
+            // 从识别结果中提取关键信息进行存储
+            if let newValue = newValue {
+                labubuSeriesId = newValue.bestMatch?.model.seriesId
+                labubuRecognitionConfidence = newValue.confidence
+                labubuRecognitionDate = Date()
+                isLabubuVerified = newValue.confidence > 0.6
+                // 清除旧的数据，因为新结构不支持序列化
+                labubuInfoData = nil
+            } else {
+                labubuSeriesId = nil
+                labubuRecognitionConfidence = 0.0
+                labubuRecognitionDate = nil
+                isLabubuVerified = false
+                labubuInfoData = nil
+            }
+        }
+    }
+    
+    /// 是否为Labubu系列
+    var isLabubu: Bool {
+        return isLabubuVerified && labubuSeriesId != nil
+    }
+    
+    /// 识别状态描述
+    var labubuRecognitionStatus: String {
+        if !isLabubuVerified {
+            return "未识别"
+        }
+        
+        if labubuRecognitionConfidence > 0.85 {
+            return "高置信度"
+        } else if labubuRecognitionConfidence > 0.6 {
+            return "中等置信度"
+        } else {
+            return "低置信度"
+        }
+    }
 } 

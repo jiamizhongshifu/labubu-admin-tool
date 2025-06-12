@@ -43,4 +43,8 @@ fastlane/test_output
 iOSInjectionProject/
 
 # macOS
-.DS_Store 
+.DS_Store
+
+# Environment variables
+.env
+admin_tool/config.js 

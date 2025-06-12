@@ -1,0 +1,46 @@
+[
+  {
+    "id": "classic-series",
+    "name": "经典系列",
+    "nameEn": "Classic Series",
+    "description": "Labubu的经典造型系列，包含最受欢迎的基础款式",
+    "releaseYear": 2019,
+    "totalModels": 12,
+    "isActive": true,
+    "createdAt": "2019-01-01T00:00:00Z",
+    "updatedAt": "2024-12-07T00:00:00Z"
+  },
+  {
+    "id": "dream-series", 
+    "name": "梦幻系列",
+    "nameEn": "Dream Series",
+    "description": "梦幻主题的特别版本，色彩丰富，造型可爱",
+    "releaseYear": 2020,
+    "totalModels": 8,
+    "isActive": true,
+    "createdAt": "2020-01-01T00:00:00Z",
+    "updatedAt": "2024-12-07T00:00:00Z"
+  },
+  {
+    "id": "festival-series",
+    "name": "节日系列", 
+    "nameEn": "Festival Series",
+    "description": "节日限定版本，包含春节、圣诞节等主题",
+    "releaseYear": 2021,
+    "totalModels": 6,
+    "isActive": true,
+    "createdAt": "2021-01-01T00:00:00Z",
+    "updatedAt": "2024-12-07T00:00:00Z"
+  },
+  {
+    "id": "artist-series",
+    "name": "艺术家合作系列",
+    "nameEn": "Artist Collaboration",
+    "description": "与知名艺术家合作的限量版，具有收藏价值",
+    "releaseYear": 2022,
+    "totalModels": 4,
+    "isActive": true,
+    "createdAt": "2022-01-01T00:00:00Z",
+    "updatedAt": "2024-12-07T00:00:00Z"
+  }
+] 

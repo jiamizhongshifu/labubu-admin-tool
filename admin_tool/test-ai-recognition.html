@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI识别功能测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .upload-area {
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: border-color 0.3s;
+        }
+        
+        .upload-area:hover {
+            border-color: #007AFF;
+        }
+        
+        .upload-area.dragover {
+            border-color: #007AFF;
+            background: #f0f8ff;
+        }
+        
+        .upload-btn {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        .upload-btn:hover {
+            background: #0056b3;
+        }
+        
+        .preview-image {
+            max-width: 300px;
+            max-height: 300px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .result-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #666;
+        }
+        
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+        
+        .success {
+            color: #155724;
+            background: #d4edda;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+        
+        .feature-tag {
+            display: inline-block;
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin: 2px;
+            font-size: 12px;
+        }
+        
+        .confidence-bar {
+            width: 100%;
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f44336 0%, #ff9800 50%, #4caf50 100%);
+            transition: width 0.3s ease;
+        }
+        
+        .config-section {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .config-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Labubu AI识别功能测试</h1>
+        
+        <!-- API配置区域 -->
+        <div class="config-section">
+            <h3>API配置</h3>
+            <p>请输入您的TUZI API密钥进行测试：</p>
+            <input type="text" id="apiKey" class="config-input" placeholder="输入TUZI API密钥" />
+            <input type="text" id="apiBase" class="config-input" value="https://api.tu-zi.com/v1" placeholder="API基础URL" />
+            <button onclick="saveConfig()" class="upload-btn">保存配置</button>
+        </div>
+        
+        <!-- 图片上传区域 -->
+        <div class="upload-area" id="uploadArea">
+            <p>📷 拖拽图片到此处或点击上传</p>
+            <button class="upload-btn" onclick="document.getElementById('fileInput').click()">选择图片</button>
+            <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="handleFileSelect(event)">
+        </div>
+        
+        <!-- 图片预览 -->
+        <div id="previewSection" style="display: none; text-align: center;">
+            <img id="previewImage" class="preview-image" />
+            <br>
+            <button class="upload-btn" onclick="analyzeImage()">🔍 开始AI分析</button>
+        </div>
+        
+        <!-- 分析结果 -->
+        <div id="resultSection" class="result-section" style="display: none;">
+            <h3>分析结果</h3>
+            <div id="resultContent"></div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+        
+        // 拖拽上传功能
+        const uploadArea = document.getElementById('uploadArea');
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+        
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
+        
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showError('请选择图片文件');
+                return;
+            }
+            
+            selectedFile = file;
+            
+            // 显示预览
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('previewImage').src = e.target.result;
+                document.getElementById('previewSection').style.display = 'block';
+                document.getElementById('resultSection').style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function saveConfig() {
+            const apiKey = document.getElementById('apiKey').value;
+            const apiBase = document.getElementById('apiBase').value;
+            
+            if (!apiKey) {
+                showError('请输入API密钥');
+                return;
+            }
+            
+            localStorage.setItem('tuzi_api_key', apiKey);
+            localStorage.setItem('tuzi_api_base', apiBase);
+            
+            showSuccess('配置已保存');
+        }
+        
+        async function analyzeImage() {
+            if (!selectedFile) {
+                showError('请先选择图片');
+                return;
+            }
+            
+            const apiKey = localStorage.getItem('tuzi_api_key');
+            const apiBase = localStorage.getItem('tuzi_api_base') || 'https://api.tu-zi.com/v1';
+            
+            if (!apiKey) {
+                showError('请先配置API密钥');
+                return;
+            }
+            
+            showLoading('AI分析中，请稍候...');
+            
+            try {
+                // 转换图片为base64
+                const base64Image = await fileToBase64(selectedFile);
+                
+                // 调用AI API
+                const result = await callAIAPI(apiKey, apiBase, base64Image);
+                
+                // 显示结果
+                showResult(result);
+                
+            } catch (error) {
+                showError('分析失败: ' + error.message);
+            }
+        }
+        
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+        
+        async function callAIAPI(apiKey, apiBase, imageData) {
+            const prompt = `你是一个专业的Labubu玩具识别专家。请仔细分析这张图片，判断是否为Labubu玩具，并提供详细的特征描述。
+
+请按照以下JSON格式返回分析结果：
+
+{
+    "isLabubu": true/false,
+    "confidence": 0.0-1.0,
+    "detailedDescription": "详细的特征描述文案",
+    "keyFeatures": ["特征1", "特征2", "特征3"],
+    "seriesHints": "可能的系列名称",
+    "materialAnalysis": "材质分析",
+    "styleAnalysis": "风格分析"
+}`;
+            
+            const response = await fetch(`${apiBase}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: 'gemini-2.5-flash-all',
+                    messages: [{
+                        role: 'user',
+                        content: [
+                            { type: 'text', text: prompt },
+                            { type: 'image_url', image_url: { url: imageData } }
+                        ]
+                    }]
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            const content = data.choices[0].message.content;
+            
+            // 解析JSON结果
+            const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || content.match(/```\s*([\s\S]*?)\s*```/);
+            const jsonText = jsonMatch ? jsonMatch[1] : content;
+            
+            return JSON.parse(jsonText);
+        }
+        
+        function showResult(result) {
+            const resultContent = document.getElementById('resultContent');
+            
+            resultContent.innerHTML = `
+                <div style="margin-bottom: 20px;">
+                    <h4>${result.isLabubu ? '✅ 识别为Labubu' : '❌ 不是Labubu'}</h4>
+                    <div>置信度: ${Math.round(result.confidence * 100)}%</div>
+                    <div class="confidence-bar">
+                        <div class="confidence-fill" style="width: ${result.confidence * 100}%"></div>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <h4>特征描述</h4>
+                    <p>${result.detailedDescription}</p>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <h4>关键特征</h4>
+                    <div>
+                        ${result.keyFeatures.map(feature => `<span class="feature-tag">${feature}</span>`).join('')}
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <h4>分析结果</h4>
+                    <p><strong>系列提示:</strong> ${result.seriesHints}</p>
+                    <p><strong>材质分析:</strong> ${result.materialAnalysis}</p>
+                    <p><strong>风格分析:</strong> ${result.styleAnalysis}</p>
+                </div>
+            `;
+            
+            document.getElementById('resultSection').style.display = 'block';
+        }
+        
+        function showLoading(message) {
+            const resultContent = document.getElementById('resultContent');
+            resultContent.innerHTML = `<div class="loading">${message}</div>`;
+            document.getElementById('resultSection').style.display = 'block';
+        }
+        
+        function showError(message) {
+            const resultContent = document.getElementById('resultContent');
+            resultContent.innerHTML = `<div class="error">${message}</div>`;
+            document.getElementById('resultSection').style.display = 'block';
+        }
+        
+        function showSuccess(message) {
+            const resultContent = document.getElementById('resultContent');
+            resultContent.innerHTML = `<div class="success">${message}</div>`;
+            document.getElementById('resultSection').style.display = 'block';
+        }
+        
+        // 页面加载时恢复配置
+        window.onload = function() {
+            const savedApiKey = localStorage.getItem('tuzi_api_key');
+            const savedApiBase = localStorage.getItem('tuzi_api_base');
+            
+            if (savedApiKey) {
+                document.getElementById('apiKey').value = savedApiKey;
+            }
+            if (savedApiBase) {
+                document.getElementById('apiBase').value = savedApiBase;
+            }
+        };
+    </script>
+</body>
+</html> 

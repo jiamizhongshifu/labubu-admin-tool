@@ -132,7 +132,7 @@ class VisionService: ObservableObject {
     private func applyMask(image: UIImage, mask: CVPixelBuffer) -> UIImage {
         print("🎨 应用蒙版生成透明背景PNG...")
         
-        guard let cgImage = image.cgImage else {
+        guard image.cgImage != nil else {
             print("❌ 无法获取CGImage")
             return image
         }
