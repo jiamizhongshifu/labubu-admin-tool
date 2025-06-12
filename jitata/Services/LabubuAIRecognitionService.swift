@@ -25,8 +25,8 @@ class LabubuAIRecognitionService: ObservableObject {
     
     // MARK: - 配置
     private let apiTimeout: TimeInterval = 120.0  // 2分钟超时，适合AI图像处理
-    private let maxImageSize: CGFloat = 1024      // 最大图像尺寸
-    private let compressionQuality: CGFloat = 0.8  // 图像压缩质量
+    private let maxImageSize: CGFloat = 800       // 降低最大图像尺寸，减少数据传输量
+    private let compressionQuality: CGFloat = 0.6  // 降低压缩质量，减少文件大小
     
     // MARK: - 数据库服务
     private let databaseService = LabubuSupabaseDatabaseService.shared
@@ -133,17 +133,30 @@ class LabubuAIRecognitionService: ObservableObject {
     
     /// 调用TUZI Vision API
     private func callTuziVisionAPI(_ image: UIImage) async throws -> LabubuAIAnalysis {
+        print("📁 LabubuAI从 \(Bundle.main.bundlePath)/.env 读取到TUZI_API_KEY")
+        print("📁 LabubuAI从 \(Bundle.main.bundlePath)/.env 读取到TUZI_API_BASE")
+        
         // 获取API配置
         guard let apiKey = getAPIKey(),
               let baseURL = getAPIBaseURL() else {
+            print("❌ API配置缺失")
             throw LabubuAIError.apiConfigurationMissing
         }
         
+        print("🔑 API密钥已获取: \(apiKey.prefix(10))...")
+        print("🌐 API基础URL: \(baseURL)")
+        
         // 转换图像为base64
         guard let imageData = image.jpegData(compressionQuality: compressionQuality) else {
+            print("❌ 图像压缩失败")
             throw LabubuAIError.imageProcessingFailed
         }
+        
+        print("📷 图像数据大小: \(imageData.count) 字节")
+        print("📷 压缩质量: \(compressionQuality)")
+        
         let base64Image = "data:image/jpeg;base64," + imageData.base64EncodedString()
+        print("📝 Base64编码完成，长度: \(base64Image.count) 字符")
         
         // 构建请求
         let url = URL(string: "\(baseURL)/chat/completions")!
@@ -153,8 +166,12 @@ class LabubuAIRecognitionService: ObservableObject {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = apiTimeout
         
+        print("🌐 请求URL: \(url.absoluteString)")
+        print("⏱️ 超时设置: \(apiTimeout) 秒")
+        
         let requestBody = [
             "model": "gemini-2.5-flash-all",
+            "stream": false,  // 明确禁用流式模式，确保完整响应
             "messages": [
                 [
                     "role": "user",
@@ -174,31 +191,71 @@ class LabubuAIRecognitionService: ObservableObject {
             ]
         ] as [String: Any]
         
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+            print("📦 请求体大小: \(request.httpBody?.count ?? 0) 字节")
+        } catch {
+            print("❌ 请求体序列化失败: \(error)")
+            throw LabubuAIError.jsonParsingFailed
+        }
+        
+        print("🚀 发送API请求...")
         
         // 发送请求
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        // 检查响应
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw LabubuAIError.networkError("无效的响应")
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            print("📥 收到响应，数据大小: \(data.count) 字节")
+            
+            // 检查响应
+            guard let httpResponse = response as? HTTPURLResponse else {
+                print("❌ 无效的HTTP响应类型")
+                throw LabubuAIError.networkError("无效的响应")
+            }
+            
+            print("📊 HTTP状态码: \(httpResponse.statusCode)")
+            
+            if httpResponse.statusCode != 200 {
+                let errorBody = String(data: data, encoding: .utf8) ?? "无法解析错误信息"
+                print("❌ API请求失败: \(httpResponse.statusCode)")
+                print("❌ 错误详情: \(errorBody)")
+                throw LabubuAIError.networkError("API请求失败: \(httpResponse.statusCode) - \(errorBody)")
+            }
+            
+            // 解析响应
+            do {
+                let jsonResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                print("✅ JSON响应解析成功")
+                
+                guard let choices = jsonResponse?["choices"] as? [[String: Any]],
+                      let firstChoice = choices.first,
+                      let message = firstChoice["message"] as? [String: Any],
+                      let content = message["content"] as? String else {
+                    print("❌ 响应格式无效")
+                    print("📝 响应内容: \(String(data: data, encoding: .utf8) ?? "无法解析")")
+                    throw LabubuAIError.invalidResponse
+                }
+                
+                print("📝 AI分析内容长度: \(content.count) 字符")
+                print("📝 AI分析内容预览: \(content.prefix(200))...")
+                
+                // 解析AI分析结果
+                let result = try parseAIAnalysisResult(content)
+                print("✅ AI分析结果解析完成")
+                print("🎯 识别结果: isLabubu=\(result.isLabubu), confidence=\(result.confidence)")
+                
+                return result
+                
+            } catch {
+                print("❌ JSON解析失败: \(error)")
+                print("📝 原始响应: \(String(data: data, encoding: .utf8) ?? "无法解析")")
+                throw LabubuAIError.jsonParsingFailed
+            }
+            
+        } catch {
+            print("❌ 网络请求失败: \(error)")
+            throw LabubuAIError.networkError("网络请求失败: \(error.localizedDescription)")
         }
-        
-        guard httpResponse.statusCode == 200 else {
-            throw LabubuAIError.networkError("API请求失败: \(httpResponse.statusCode)")
-        }
-        
-        // 解析响应
-        let jsonResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        guard let choices = jsonResponse?["choices"] as? [[String: Any]],
-              let firstChoice = choices.first,
-              let message = firstChoice["message"] as? [String: Any],
-              let content = message["content"] as? String else {
-            throw LabubuAIError.invalidResponse
-        }
-        
-        // 解析AI分析结果
-        return try parseAIAnalysisResult(content)
     }
     
     /// 构建Labubu识别提示词

@@ -140,9 +140,16 @@ class CameraManager: NSObject, ObservableObject {
             // 配置自动对焦
             try videoDevice.lockForConfiguration()
             
-            // 设置自动对焦模式
-            if videoDevice.isFocusModeSupported(.continuousAutoFocus) {
-                videoDevice.focusMode = .continuousAutoFocus
+            // 🎯 优化对焦配置，增强近距离对焦能力
+            if videoDevice.isFocusModeSupported(.autoFocus) {
+                videoDevice.focusMode = .autoFocus  // 改为单次自动对焦，更适合近距离拍摄
+            }
+            
+            // 🎯 启用微距对焦（如果设备支持）
+            if #available(iOS 15.0, *) {
+                if videoDevice.isAutoFocusRangeRestrictionSupported {
+                    videoDevice.autoFocusRangeRestriction = .none  // 允许全范围对焦，包括微距
+                }
             }
             
             // 设置自动曝光模式
@@ -153,6 +160,11 @@ class CameraManager: NSObject, ObservableObject {
             // 设置自动白平衡
             if videoDevice.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
                 videoDevice.whiteBalanceMode = .continuousAutoWhiteBalance
+            }
+            
+            // 🎯 启用平滑自动对焦（减少对焦时的抖动）
+            if videoDevice.isSmoothAutoFocusSupported {
+                videoDevice.isSmoothAutoFocusEnabled = true
             }
             
             videoDevice.unlockForConfiguration()
@@ -243,30 +255,55 @@ class CameraManager: NSObject, ObservableObject {
     // MARK: - 对焦功能
     func focusAt(point: CGPoint, in view: UIView) {
         guard let videoDevice = self.videoDevice,
-              let previewLayer = self.previewLayer else { return }
+              let previewLayer = self.previewLayer else { 
+            print("❌ 对焦失败：设备或预览层不可用")
+            return 
+        }
+        
+        print("🎯 开始手动对焦，点击位置: (\(point.x), \(point.y))")
         
         // 将屏幕坐标转换为相机坐标
         let devicePoint = previewLayer.captureDevicePointConverted(fromLayerPoint: point)
+        print("📍 转换后的设备坐标: (\(devicePoint.x), \(devicePoint.y))")
         
         do {
             try videoDevice.lockForConfiguration()
             
-            // 设置对焦点
+            // 🎯 优化对焦设置，特别针对近距离对焦
             if videoDevice.isFocusPointOfInterestSupported {
                 videoDevice.focusPointOfInterest = devicePoint
-                videoDevice.focusMode = .autoFocus
+                
+                // 🎯 使用单次自动对焦，更适合手动点击对焦
+                if videoDevice.isFocusModeSupported(.autoFocus) {
+                    videoDevice.focusMode = .autoFocus
+                    print("✅ 设置单次自动对焦模式")
+                }
+                
+                // 🎯 启用微距对焦范围（如果支持）
+                if #available(iOS 15.0, *) {
+                    if videoDevice.isAutoFocusRangeRestrictionSupported {
+                        videoDevice.autoFocusRangeRestriction = .none
+                        print("✅ 启用全范围对焦（包括微距）")
+                    }
+                }
+            } else {
+                print("⚠️ 设备不支持对焦点设置")
             }
             
             // 设置曝光点
             if videoDevice.isExposurePointOfInterestSupported {
                 videoDevice.exposurePointOfInterest = devicePoint
-                videoDevice.exposureMode = .autoExpose
+                if videoDevice.isExposureModeSupported(.autoExpose) {
+                    videoDevice.exposureMode = .autoExpose
+                    print("✅ 设置曝光点")
+                }
             }
             
             videoDevice.unlockForConfiguration()
+            print("✅ 手动对焦设置完成")
             
         } catch {
-            print("对焦失败: \(error)")
+            print("❌ 对焦失败: \(error.localizedDescription)")
         }
     }
 }

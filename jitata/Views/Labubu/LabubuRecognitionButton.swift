@@ -13,8 +13,8 @@ struct LabubuRecognitionButton: View {
     let onRecognitionComplete: (LabubuRecognitionResult) -> Void
     
     @StateObject private var recognitionService = LabubuRecognitionService.shared
+    @StateObject private var aiRecognitionService = LabubuAIRecognitionService.shared
     @State private var recognitionState: LabubuRecognitionState = .idle
-    @State private var showingResult = false
     @State private var recognitionResult: LabubuRecognitionResult?
     @State private var errorMessage: String?
     
@@ -34,11 +34,6 @@ struct LabubuRecognitionButton: View {
             // 错误信息
             if let errorMessage = errorMessage {
                 errorSection(errorMessage)
-            }
-        }
-        .sheet(isPresented: $showingResult) {
-            if let result = recognitionResult {
-                LabubuRecognitionResultView(result: result)
             }
         }
     }
@@ -155,23 +150,87 @@ struct LabubuRecognitionButton: View {
         errorMessage = nil
         
         do {
-            let result = try await recognitionService.recognizeLabubu(image)
+            // 优先尝试AI识别
+            print("🤖 尝试AI识别...")
+            let aiResult = try await aiRecognitionService.recognizeUserPhoto(image)
+            
+            // 转换AI识别结果为标准格式
+            let result = convertAIResultToStandardResult(aiResult, originalImage: image)
             
             recognitionResult = result
             recognitionState = .completed
-            showingResult = true
             onRecognitionComplete(result)
             
         } catch {
-            recognitionState = .failed
-            errorMessage = error.localizedDescription
+            print("⚠️ AI识别失败，降级到简单识别: \(error)")
             
-            // 3秒后重置状态
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                recognitionState = .idle
-                errorMessage = nil
+            // AI识别失败，降级到简单识别
+            do {
+                let result = try await recognitionService.recognizeLabubu(image)
+                
+                recognitionResult = result
+                recognitionState = .completed
+                onRecognitionComplete(result)
+                
+            } catch let fallbackError {
+                recognitionState = .failed
+                errorMessage = "识别失败: \(fallbackError.localizedDescription)"
+                
+                // 3秒后重置状态
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    recognitionState = .idle
+                    errorMessage = nil
+                }
             }
         }
+    }
+    
+    /// 转换AI识别结果为标准识别结果格式
+    private func convertAIResultToStandardResult(_ aiResult: LabubuAIRecognitionResult, originalImage: UIImage) -> LabubuRecognitionResult {
+        // 转换匹配结果
+        let bestMatch: LabubuMatch? = aiResult.matchResults.first.map { dbMatch in
+            LabubuMatch(
+                model: dbMatch.model,
+                series: nil, // AI结果中没有series信息，可以后续查询
+                confidence: dbMatch.similarity,
+                matchedFeatures: dbMatch.matchedFeatures
+            )
+        }
+        
+        // 转换备选项
+        let alternatives = aiResult.matchResults.dropFirst().map { $0.model }
+        
+        // 创建默认特征
+        let features = VisualFeatures(
+            primaryColors: [],
+            colorDistribution: [:],
+            shapeDescriptor: ShapeDescriptor(
+                aspectRatio: 0.8,
+                roundness: 0.85,
+                symmetry: 0.9,
+                complexity: 0.4,
+                keyPoints: []
+            ),
+            contourPoints: nil,
+            textureFeatures: LabubuTextureFeatures(
+                smoothness: 0.7,
+                roughness: 0.3,
+                patterns: [],
+                materialType: .plush
+            ),
+            specialMarks: [],
+            featureVector: []
+        )
+        
+        return LabubuRecognitionResult(
+            originalImage: originalImage,
+            bestMatch: bestMatch,
+            alternatives: Array(alternatives),
+            confidence: aiResult.confidence,
+            processingTime: aiResult.processingTime,
+            features: features,
+            timestamp: aiResult.timestamp
+        )
     }
 }
 

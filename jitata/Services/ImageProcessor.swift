@@ -208,31 +208,37 @@ class ImageProcessor {
     
     /// 将抠图结果裁剪为1:1比例，最小化留白区域
     func cropToSquareAspectRatio(_ image: UIImage) -> UIImage {
-        guard let cgImage = image.cgImage else { return image }
+        print("🔍 [cropToSquareAspectRatio] 开始处理图像，原始尺寸: \(image.size)")
         
-        // 获取图片非透明区域的边界
-        let bounds = getNonTransparentBounds(cgImage)
+        guard let cgImage = image.cgImage else { 
+            print("❌ [cropToSquareAspectRatio] 无法获取CGImage")
+            return image 
+        }
+        
+        // 🎯 修复：使用更智能的主体检测
+        let bounds = getMainSubjectBounds(cgImage)
+        print("🎯 [cropToSquareAspectRatio] 检测到的主体边界: \(bounds)")
         
         // 如果无法检测到有效内容，返回原图
-        guard bounds != .zero else { return image }
+        guard bounds != .zero else { 
+            print("⚠️ [cropToSquareAspectRatio] 未检测到有效主体，返回原图")
+            return image 
+        }
         
         // 计算正方形尺寸（取较大的边）
         let squareSize = max(bounds.width, bounds.height)
+        print("📐 [cropToSquareAspectRatio] 计算的正方形尺寸: \(squareSize)")
         
         // 计算居中位置
         let centerX = bounds.midX
         let centerY = bounds.midY
-        let squareRect = CGRect(
-            x: centerX - squareSize/2,
-            y: centerY - squareSize/2,
-            width: squareSize,
-            height: squareSize
-        )
+        print("📍 [cropToSquareAspectRatio] 主体中心点: (\(centerX), \(centerY))")
         
-        // 确保裁剪区域不超出原图边界，并适当扩展
+        // 🎯 修复：减少边距，避免包含过多背景区域
         let imageSize = CGSize(width: cgImage.width, height: cgImage.height)
-        let padding: CGFloat = squareSize * 0.1 // 添加10%的边距
+        let padding: CGFloat = squareSize * 0.05 // 从10%减少到5%的边距
         let finalSquareSize = squareSize + padding * 2
+        print("📏 [cropToSquareAspectRatio] 最终正方形尺寸（含边距）: \(finalSquareSize)")
         
         let finalRect = CGRect(
             x: max(0, centerX - finalSquareSize/2),
@@ -240,9 +246,13 @@ class ImageProcessor {
             width: min(finalSquareSize, imageSize.width),
             height: min(finalSquareSize, imageSize.height)
         )
+        print("✂️ [cropToSquareAspectRatio] 最终裁剪区域: \(finalRect)")
         
         // 裁剪图片
-        guard let croppedCGImage = cgImage.cropping(to: finalRect) else { return image }
+        guard let croppedCGImage = cgImage.cropping(to: finalRect) else { 
+            print("❌ [cropToSquareAspectRatio] 裁剪失败")
+            return image 
+        }
         
         // 创建正方形画布
         let finalSize = CGSize(width: finalSquareSize, height: finalSquareSize)
@@ -254,6 +264,7 @@ class ImageProcessor {
             width: CGFloat(croppedCGImage.width),
             height: CGFloat(croppedCGImage.height)
         )
+        print("🎨 [cropToSquareAspectRatio] 绘制区域: \(drawRect)")
         
         let croppedUIImage = UIImage(cgImage: croppedCGImage, scale: image.scale, orientation: image.imageOrientation)
         croppedUIImage.draw(in: drawRect)
@@ -261,11 +272,14 @@ class ImageProcessor {
         let result = UIGraphicsGetImageFromCurrentImageContext() ?? image
         UIGraphicsEndImageContext()
         
+        print("✅ [cropToSquareAspectRatio] 处理完成，结果尺寸: \(result.size)")
         return result
     }
     
-    /// 检测图片中非透明像素的边界
-    private func getNonTransparentBounds(_ cgImage: CGImage) -> CGRect {
+    /// 🎯 新增：智能主体检测，使用双重阈值确保精确识别
+    private func getMainSubjectBounds(_ cgImage: CGImage) -> CGRect {
+        print("🔍 [getMainSubjectBounds] 开始主体检测，图像尺寸: \(cgImage.width)x\(cgImage.height)")
+        
         let width = cgImage.width
         let height = cgImage.height
         let bytesPerPixel = 4
@@ -281,30 +295,47 @@ class ImageProcessor {
                 space: colorSpace,
                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
               ) else {
+            print("❌ [getMainSubjectBounds] 无法创建CGContext")
             return CGRect(x: 0, y: 0, width: width, height: height)
         }
         
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
         
         guard let data = context.data else {
+            print("❌ [getMainSubjectBounds] 无法获取像素数据")
             return CGRect(x: 0, y: 0, width: width, height: height)
         }
         
-        let pixels = data.bindMemory(to: UInt8.self, capacity: width * height * bytesPerPixel)
+        let pixelData = data.assumingMemoryBound(to: UInt8.self)
         
-        var minX = width
-        var maxX = 0
-        var minY = height
-        var maxY = 0
+        // 🎯 使用高阈值进行主体检测
+        let highAlphaThreshold: UInt8 = 200
+        var bounds = detectBounds(pixelData: pixelData, width: width, height: height, alphaThreshold: highAlphaThreshold)
+        print("🎯 [getMainSubjectBounds] 高阈值(\(highAlphaThreshold))检测结果: \(bounds)")
         
-        // 扫描所有像素，找到非透明区域的边界
+        // 如果高阈值检测失败，使用中等阈值作为降级方案
+        if bounds == .zero {
+            let mediumAlphaThreshold: UInt8 = 128
+            bounds = detectBounds(pixelData: pixelData, width: width, height: height, alphaThreshold: mediumAlphaThreshold)
+            print("🔄 [getMainSubjectBounds] 降级到中等阈值(\(mediumAlphaThreshold))检测结果: \(bounds)")
+        }
+        
+        print("✅ [getMainSubjectBounds] 最终主体边界: \(bounds)")
+        return bounds
+    }
+    
+    /// 检测指定阈值下的边界
+    private func detectBounds(pixelData: UnsafeMutablePointer<UInt8>, width: Int, height: Int, alphaThreshold: UInt8) -> CGRect {
+        var minX = width, maxX = 0, minY = height, maxY = 0
+        var pixelCount = 0
+        
         for y in 0..<height {
             for x in 0..<width {
-                let pixelIndex = (y * width + x) * bytesPerPixel
-                let alpha = pixels[pixelIndex + 3] // Alpha通道
+                let pixelIndex = (y * width + x) * 4
+                let alpha = pixelData[pixelIndex + 3]
                 
-                // 如果像素不是完全透明
-                if alpha > 10 { // 允许一些容差
+                if alpha > alphaThreshold {
+                    pixelCount += 1
                     minX = min(minX, x)
                     maxX = max(maxX, x)
                     minY = min(minY, y)
@@ -313,12 +344,23 @@ class ImageProcessor {
             }
         }
         
-        // 如果没有找到非透明像素，返回全图
-        if minX >= maxX || minY >= maxY {
-            return CGRect(x: 0, y: 0, width: width, height: height)
+        print("📊 [detectBounds] 阈值\(alphaThreshold): 检测到\(pixelCount)个有效像素")
+        
+        // 如果没有检测到足够的像素，返回零矩形
+        if pixelCount < 100 { // 至少需要100个像素才认为是有效主体
+            print("⚠️ [detectBounds] 有效像素数量不足(\(pixelCount) < 100)")
+            return .zero
         }
         
-        return CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
+        let detectedBounds = CGRect(
+            x: minX,
+            y: minY,
+            width: maxX - minX + 1,
+            height: maxY - minY + 1
+        )
+        
+        print("📐 [detectBounds] 检测边界: \(detectedBounds)")
+        return detectedBounds
     }
     
     /// 创建缩略图

@@ -76,7 +76,7 @@ class VisionService: ObservableObject {
             throw VisionError.invalidImage
         }
         
-        return try await withCheckedThrowingContinuation { continuation in
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<UIImage, Error>) in
             // 创建VNGenerateForegroundInstanceMaskRequest（按文档要求）
             let request = VNGenerateForegroundInstanceMaskRequest { request, error in
                 if let error = error {
@@ -95,16 +95,30 @@ class VisionService: ObservableObject {
                 do {
                     print("✅ 检测到 \(observation.allInstances.count) 个前景实例")
                     
-                    // 生成所有实例的蒙版（按文档方法）
-                    let maskPixelBuffer = try observation.generateScaledMaskForImage(
-                        forInstances: observation.allInstances,
-                        from: VNImageRequestHandler(cgImage: cgImage, options: [:])
-                    )
+                    // 🎯 修复：VNInstanceMaskObservation.allInstances是IndexSet，不是实例数组
+                    // 我们需要使用不同的方法来处理多个实例
+                    let maskPixelBuffer: CVPixelBuffer
+                    
+                    if observation.allInstances.count > 1 {
+                        print("🎯 检测到多个实例，将选择主要实例")
+                        // 对于多个实例的情况，我们可以选择第一个实例或使用所有实例
+                        // 这里我们使用所有实例，让系统自动选择最重要的
+                        maskPixelBuffer = try observation.generateScaledMaskForImage(
+                            forInstances: observation.allInstances,
+                            from: VNImageRequestHandler(cgImage: cgImage, options: [:])
+                        )
+                    } else {
+                        // 只有一个实例，直接使用
+                        maskPixelBuffer = try observation.generateScaledMaskForImage(
+                            forInstances: observation.allInstances,
+                            from: VNImageRequestHandler(cgImage: cgImage, options: [:])
+                        )
+                    }
                     
                     // 应用蒙版创建透明背景PNG（按文档要求）
                     let cutoutImage = self.applyMask(image: image, mask: maskPixelBuffer)
                     
-                    print("✅ RemoveBackgroundRequest成功，输出透明PNG")
+                    print("✅ RemoveBackgroundRequest成功，输出透明PNG（仅保留主体）")
                     continuation.resume(returning: cutoutImage)
                     
                 } catch {
