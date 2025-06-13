@@ -369,23 +369,12 @@ struct SimpleStickerCard: View {
                     .padding(8)
                 }
                 
-                // 贴纸名称和价格信息
-                VStack(spacing: 4) {
-                    // 贴纸名称（优先显示识别结果）
-                    Text(sticker.displayName)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    
-                    // 参考价格（如果有识别结果）
-                    if let priceInfo = sticker.referencePrice {
-                        Text(priceInfo)
-                            .font(.system(size: 12, weight: .regular))
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                    }
-                }
+                // 贴纸名称
+                Text(sticker.name)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
             .opacity(opacityValue)
             .animation(.easeInOut(duration: 0.3), value: opacityValue)

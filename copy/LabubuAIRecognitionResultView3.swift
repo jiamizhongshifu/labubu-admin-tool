@@ -53,31 +53,7 @@ struct LabubuAIRecognitionResultView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("重新识别") {
-                        // 直接返回详情页并重置识别状态
-                        // 通过传递一个空的匹配结果来标识这是重新识别请求
-                        let emptyAnalysis = LabubuAIAnalysis(
-                            isLabubu: false,
-                            confidence: 0.0,
-                            detailedDescription: "RERECOGNITION_REQUEST", // 特殊标识
-                            visualFeatures: nil,
-                            keyFeatures: [],
-                            seriesHints: "",
-                            materialAnalysis: "",
-                            styleAnalysis: "",
-                            conditionAssessment: "",
-                            rarityHints: ""
-                        )
-                        
-                        let resetResult = LabubuAIRecognitionResult(
-                            originalImage: result.originalImage ?? UIImage(),
-                            aiAnalysis: emptyAnalysis,
-                            matchResults: [],
-                            processingTime: 0,
-                            timestamp: Date()
-                        )
-                        
-                        onReRecognition?(resetResult)
-                        dismiss()
+                        showingReRecognition = true
                     }
                     .foregroundColor(.blue)
                 }
@@ -633,8 +609,6 @@ struct LabubuAIRecognitionResultView: View {
         let selectedMatch = result.matchResults[selectedMatchIndex]
         isLoadingDetails = true
         
-        print("🔍 开始加载模型详情: \(selectedMatch.model.name) (ID: \(selectedMatch.model.id))")
-        
         // 先检查URL缓存
         if let cachedUrl = ImageCacheManager.shared.getCachedImageUrl(for: selectedMatch.model.id) {
             self.referenceImages = [cachedUrl]
@@ -648,72 +622,17 @@ struct LabubuAIRecognitionResultView: View {
             let images = await databaseManager.getModelReferenceImages(modelId: selectedMatch.model.id)
             
             await MainActor.run {
-                // 确保这仍然是当前选择的模型（防止异步加载时用户又切换了）
-                let currentSelectedMatch = result.matchResults[selectedMatchIndex]
-                if currentSelectedMatch.model.id == selectedMatch.model.id {
-                    self.referenceImages = images
-                    self.isLoadingDetails = false
-                    
-                    // 缓存第一张图片的URL
-                    if let firstImage = images.first {
-                        ImageCacheManager.shared.cacheImageUrl(firstImage, for: selectedMatch.model.id)
-                    }
-                    
-                    print("📷 加载模型图片完成: \(self.referenceImages.count) 张图片，模型: \(currentSelectedMatch.model.name)")
-                } else {
-                    print("⚠️ 模型已切换，忽略过期的图片加载结果")
+                self.referenceImages = images
+                self.isLoadingDetails = false
+                
+                // 缓存第一张图片的URL
+                if let firstImage = images.first {
+                    ImageCacheManager.shared.cacheImageUrl(firstImage, for: selectedMatch.model.id)
                 }
+                
+                print("📷 加载模型图片完成: \(self.referenceImages.count) 张图片")
             }
         }
-    }
-    
-    /// 强制加载模型详细信息（不使用缓存）
-    private func loadModelDetailsForced() {
-        guard !result.matchResults.isEmpty else { return }
-        
-        let selectedMatch = result.matchResults[selectedMatchIndex]
-        isLoadingDetails = true
-        
-        print("🔍 强制加载模型详情: \(selectedMatch.model.name) (ID: \(selectedMatch.model.id))")
-        
-        // 直接从数据库管理器获取模型的参考图片，不使用缓存
-        Task {
-            let images = await databaseManager.getModelReferenceImages(modelId: selectedMatch.model.id)
-            
-            await MainActor.run {
-                // 确保这仍然是当前选择的模型（防止异步加载时用户又切换了）
-                let currentSelectedMatch = result.matchResults[selectedMatchIndex]
-                if currentSelectedMatch.model.id == selectedMatch.model.id {
-                    self.referenceImages = images
-                    self.isLoadingDetails = false
-                    
-                    // 更新缓存
-                    if let firstImage = images.first {
-                        ImageCacheManager.shared.cacheImageUrl(firstImage, for: selectedMatch.model.id)
-                    }
-                    
-                    print("📷 强制加载模型图片完成: \(self.referenceImages.count) 张图片，模型: \(currentSelectedMatch.model.name)")
-                } else {
-                    print("⚠️ 模型已切换，忽略过期的图片加载结果")
-                }
-            }
-        }
-    }
-    
-    /// 创建更新后的匹配结果列表，将选择的候选模型放在第一位
-    private func createUpdatedMatchResults(selectedIndex: Int) -> [LabubuDatabaseMatch] {
-        var updatedResults = result.matchResults
-        
-        // 将选择的模型移到第一位
-        if selectedIndex < updatedResults.count {
-            let selectedMatch = updatedResults[selectedIndex]
-            updatedResults.remove(at: selectedIndex)
-            updatedResults.insert(selectedMatch, at: 0)
-            
-            print("🔄 重新排列匹配结果，新的最佳匹配: \(selectedMatch.model.name)")
-        }
-        
-        return updatedResults
     }
     
     // MARK: - 重新识别视图
@@ -885,38 +804,9 @@ struct LabubuAIRecognitionResultView: View {
     // MARK: - 候选模型行
     private func candidateModelRow(_ match: LabubuDatabaseMatch, index: Int) -> some View {
         Button(action: {
-            print("🔄 用户选择了新的候选模型: \(match.model.name) (索引: \(index))")
-            
-            // 更新选择的索引
             selectedMatchIndex = index
-            
-            // 立即清空当前图片，显示加载状态
-            referenceImages = []
-            isLoadingDetails = true
-            
-            // 强制重新加载新选择模型的详细信息（不使用缓存）
-            loadModelDetailsForced()
-            
-            // 创建新的识别结果，将选择的候选模型作为最佳匹配
-            let updatedMatchResults = createUpdatedMatchResults(selectedIndex: index)
-            let updatedResult = LabubuAIRecognitionResult(
-                originalImage: result.originalImage ?? UIImage(),
-                aiAnalysis: result.aiAnalysis,
-                matchResults: updatedMatchResults,
-                processingTime: result.processingTime,
-                timestamp: Date() // 更新时间戳
-            )
-            
-            // 通过回调保存更新的结果
-            onReRecognition?(updatedResult)
-            print("✅ 已保存用户选择的候选模型: \(match.model.name)")
-            
-            // 关闭修正界面
+            loadModelDetails() // 重新加载新选择模型的详细信息
             showingCorrection = false
-            
-            // 添加触觉反馈
-            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-            impactFeedback.impactOccurred()
         }) {
             HStack(spacing: 12) {
                 // 候选模型图片 - 加载实际图片

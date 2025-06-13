@@ -262,54 +262,8 @@ struct AIEnhancementStatusIndicator: View {
     @State private var showProgressView = false
     
     var body: some View {
-        let status = sticker.aiEnhancementStatus
-        let isCurrentlyProcessing = enhancementService.currentSticker?.id == sticker.id
-        
-        if status != .completed {
-            Button(action: {
-                // 点击徽章显示进度窗口（所有状态都可以点击）
-                showProgressView = true
-            }) {
-                HStack(spacing: 4) {
-                // 图标
-                if isCurrentlyProcessing && status == .processing {
-                    // 当前正在处理的贴纸显示进度环
-                    ZStack {
-                        Circle()
-                            .stroke(Color.blue.opacity(0.3), lineWidth: 2)
-                            .frame(width: 12, height: 12)
-                        
-                        Circle()
-                            .trim(from: 0, to: sticker.aiEnhancementProgress)
-                            .stroke(Color.blue, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                            .frame(width: 12, height: 12)
-                            .rotationEffect(.degrees(-90))
-                            .animation(.easeInOut(duration: 0.3), value: sticker.aiEnhancementProgress)
-                    }
-                } else {
-                    Image(systemName: status.icon)
-                        .font(.system(size: 10, weight: .medium))
-                }
-                
-                // 状态文字
-                Text(isCurrentlyProcessing && status == .processing ? 
-                     "\(Int(sticker.aiEnhancementProgress * 100))%" : 
-                     status.displayName)
-                    .font(.system(size: 10, weight: .medium))
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(badgeBackgroundColor(for: status))
-            )
-            .foregroundColor(badgeTextColor(for: status))
-            }
-            .buttonStyle(PlainButtonStyle())
-            .sheet(isPresented: $showProgressView) {
-                AIEnhancementProgressView(isPresented: $showProgressView, sticker: sticker)
-            }
-        }
+        // 根据用户偏好，不再显示增强提示
+        EmptyView()
     }
     
     // 徽章背景颜色

@@ -133,6 +133,10 @@ final class ToySticker: Identifiable {
     var labubuRecognitionConfidence: Double = 0.0  // 识别置信度
     var labubuRecognitionDate: Date?  // 识别时间
     
+    // MARK: - AI Recognition Properties
+    var aiRecognitionResultData: Data?  // 存储序列化的AI识别结果
+    var hasAIRecognitionResult: Bool = false  // 是否有AI识别结果
+    
     init(name: String, categoryName: String, originalImage: UIImage, processedImage: UIImage, notes: String = "") {
         self.id = UUID()
         self.name = name
@@ -372,6 +376,48 @@ extension ToySticker {
         }
     }
     
+    /// AI识别结果（新版本，支持持久化）
+    var aiRecognitionResult: LabubuAIRecognitionResult? {
+        get {
+            guard let data = aiRecognitionResultData else { return nil }
+            do {
+                return try JSONDecoder().decode(LabubuAIRecognitionResult.self, from: data)
+            } catch {
+                print("❌ AI识别结果反序列化失败: \(error)")
+                return nil
+            }
+        }
+        set {
+            if let newValue = newValue {
+                do {
+                    aiRecognitionResultData = try JSONEncoder().encode(newValue)
+                    hasAIRecognitionResult = true
+                    
+                    // 同时更新基础识别信息
+                    labubuSeriesId = newValue.bestMatch?.seriesId
+                    labubuRecognitionConfidence = newValue.confidence
+                    labubuRecognitionDate = newValue.timestamp
+                    isLabubuVerified = newValue.isSuccessful
+                    
+                    print("✅ AI识别结果已保存到ToySticker")
+                } catch {
+                    print("❌ AI识别结果序列化失败: \(error)")
+                    aiRecognitionResultData = nil
+                    hasAIRecognitionResult = false
+                }
+            } else {
+                aiRecognitionResultData = nil
+                hasAIRecognitionResult = false
+                
+                // 清除相关信息
+                labubuSeriesId = nil
+                labubuRecognitionConfidence = 0.0
+                labubuRecognitionDate = nil
+                isLabubuVerified = false
+            }
+        }
+    }
+    
     /// 是否为Labubu系列
     var isLabubu: Bool {
         return isLabubuVerified && labubuSeriesId != nil
@@ -390,5 +436,40 @@ extension ToySticker {
         } else {
             return "低置信度"
         }
+    }
+    
+    /// 显示名称（优先使用识别结果的模型名称）
+    var displayName: String {
+        if let recognitionResult = aiRecognitionResult,
+           let bestMatch = recognitionResult.bestMatch,
+           recognitionResult.isSuccessful {
+            return bestMatch.name
+        }
+        return name
+    }
+    
+    /// 参考价格信息
+    var referencePrice: String? {
+        guard let recognitionResult = aiRecognitionResult,
+              let bestMatch = recognitionResult.bestMatch,
+              recognitionResult.isSuccessful else {
+            return nil
+        }
+        
+        // 构建价格显示字符串
+        if let minPrice = bestMatch.estimatedPriceMin,
+           let maxPrice = bestMatch.estimatedPriceMax {
+            if minPrice == maxPrice {
+                return "参考价格: ¥\(Int(minPrice))"
+            } else {
+                return "参考价格: ¥\(Int(minPrice))-\(Int(maxPrice))"
+            }
+        } else if let minPrice = bestMatch.estimatedPriceMin {
+            return "参考价格: ¥\(Int(minPrice))+"
+        } else if let maxPrice = bestMatch.estimatedPriceMax {
+            return "参考价格: ≤¥\(Int(maxPrice))"
+        }
+        
+        return nil
     }
 } 

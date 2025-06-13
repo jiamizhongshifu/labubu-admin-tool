@@ -337,17 +337,8 @@ struct StickerConfirmationView: View {
     @State private var notes = ""
     @State private var isKeyboardVisible = false
     @State private var shouldNavigateToCollection = false
-    @FocusState private var isNameFieldFocused: Bool
     
     let categories = CategoryConstants.allCategories
-    
-    // 日期时间格式化器
-    private var dateTimeFormatter: DateFormatter {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "M月dd日 HH:mm"
-        formatter.locale = Locale(identifier: "zh_CN")
-        return formatter
-    }
     
     var body: some View {
         ZStack {
@@ -381,11 +372,19 @@ struct StickerConfirmationView: View {
                 
                 // 底部输入区域
                 VStack(spacing: 16) {
-                    // 名称输入 - 自动聚焦
+                    // 分类选择
+                    Picker("分类", selection: $selectedCategory) {
+                        ForEach(categories, id: \.self) { category in
+                            Text(category).tag(category)
+                        }
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .padding(.horizontal, 20)
+                    
+                    // 名称输入
                     TextField("给你的潮玩起个名字", text: $stickerName)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .padding(.horizontal, 20)
-                        .focused($isNameFieldFocused)
                     
                     // 底部按钮 - 同一行布局
                     HStack(spacing: 16) {
@@ -406,7 +405,7 @@ struct StickerConfirmationView: View {
                         // 确认保存按钮
                         Button(action: {
                             HapticFeedbackManager.shared.lightTap()
-                            let finalName = stickerName.isEmpty ? dateTimeFormatter.string(from: Date()) : stickerName
+                            let finalName = stickerName.isEmpty ? "未命名潮玩" : stickerName
                             onConfirm(finalName, selectedCategory, "")
                         }) {
                             HStack {
@@ -427,12 +426,6 @@ struct StickerConfirmationView: View {
             }
         }
         .navigationBarHidden(true)
-        .onAppear {
-            // 页面出现时自动聚焦到命名输入框
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                isNameFieldFocused = true
-            }
-        }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             isKeyboardVisible = true
         }

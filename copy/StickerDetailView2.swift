@@ -51,28 +51,19 @@ struct StickerDetailView: View {
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // 当天收集的潮玩小图横向滚动 - 固定在顶部
+                // 当天收集的潮玩小图横向滚动
                 if todayStickers.count > 1 {
                     thumbnailScrollView
-                        .frame(height: 170) // 固定整个缩略图区域的总高度
-                } else {
-                    // 当只有一个潮玩时，保持相同高度以确保布局一致性
-                    Rectangle()
-                        .fill(Color.clear)
-                        .frame(height: 170)
                 }
                 
-                // 可滚动的内容区域
-                ScrollView {
-                    VStack(spacing: 0) {
-                        // 中间区域 - 大图展示和左右滑动
-                        mainImageTabView
-                        
-                        // 底部区域 - 潮玩信息和操作按钮
-                        bottomContentView
-                    }
-                }
+                // 中间区域 - 大图展示和左右滑动
+                mainImageTabView
+                
+                // 底部区域 - 潮玩信息和操作按钮
+                bottomContentView
             }
+            
+            Spacer()
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
@@ -149,47 +140,15 @@ struct StickerDetailView: View {
         .sheet(isPresented: $showingLabubuRecognition) {
             if let aiResult = currentSticker.aiRecognitionResult {
                 LabubuAIRecognitionResultView(result: aiResult) { newResult in
-                    // 检查是否是重新识别请求
-                    if newResult.aiAnalysis.detailedDescription == "RERECOGNITION_REQUEST" {
-                        // 重置识别状态
-                        currentSticker.aiRecognitionResult = nil
-                        currentSticker.labubuInfo = nil
-                        currentSticker.isLabubuVerified = false
-                        currentSticker.labubuSeriesId = nil
-                        currentSticker.labubuRecognitionConfidence = 0.0
-                        currentSticker.labubuRecognitionDate = nil
-                        currentSticker.hasAIRecognitionResult = false
-                        saveRecognitionStateForCurrentSticker()
-                        print("🔄 重新识别请求：已重置识别状态")
-                    } else {
-                        // 正常的重新识别完成后的回调
-                        currentSticker.aiRecognitionResult = newResult
-                        saveRecognitionStateForCurrentSticker()
-                        print("✅ 重新识别完成：已更新识别结果")
-                    }
+                    // 重新识别完成后的回调
+                    currentSticker.aiRecognitionResult = newResult
                 }
             } else if let result = currentSticker.labubuInfo {
                 // 将传统识别结果转换为AI识别结果格式，统一使用新的结果页面
                 LabubuAIRecognitionResultView(result: convertToAIResult(result)) { newResult in
-                    // 检查是否是重新识别请求
-                    if newResult.aiAnalysis.detailedDescription == "RERECOGNITION_REQUEST" {
-                        // 重置识别状态
-                        currentSticker.aiRecognitionResult = nil
-                        currentSticker.labubuInfo = nil
-                        currentSticker.isLabubuVerified = false
-                        currentSticker.labubuSeriesId = nil
-                        currentSticker.labubuRecognitionConfidence = 0.0
-                        currentSticker.labubuRecognitionDate = nil
-                        currentSticker.hasAIRecognitionResult = false
-                        saveRecognitionStateForCurrentSticker()
-                        print("🔄 重新识别请求：已重置识别状态")
-                    } else {
-                        // 重新识别完成后的回调
-                        currentSticker.aiRecognitionResult = newResult
-                        currentSticker.labubuInfo = nil // 清空旧格式结果
-                        saveRecognitionStateForCurrentSticker()
-                        print("✅ 重新识别完成：已更新识别结果")
-                    }
+                    // 重新识别完成后的回调
+                    currentSticker.aiRecognitionResult = newResult
+                    currentSticker.labubuInfo = nil // 清空旧格式结果
                 }
             }
         }
@@ -250,33 +209,26 @@ struct StickerDetailView: View {
     
     private var thumbnailScrollView: some View {
         ScrollViewReader { proxy in
-            VStack(spacing: 0) {
-                Spacer()
-                    .frame(height: 20) // 顶部间距
-                
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(Array(todayStickers.enumerated()), id: \.element.id) { index, daySticker in
-                            ThumbnailView(
-                                sticker: daySticker,
-                                isSelected: index == selectedStickerIndex
-                            )
-                            .id(index)
-                            .onTapGesture {
-                                HapticFeedbackManager.shared.lightTap()
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    selectedStickerIndex = index
-                                }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(Array(todayStickers.enumerated()), id: \.element.id) { index, daySticker in
+                        ThumbnailView(
+                            sticker: daySticker,
+                            isSelected: index == selectedStickerIndex
+                        )
+                        .id(index)
+                        .onTapGesture {
+                            HapticFeedbackManager.shared.lightTap()
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                selectedStickerIndex = index
                             }
                         }
                     }
-                    .padding(.horizontal, 20)
                 }
-                .frame(height: 80) // 缩略图滚动区域高度
-                
-                Spacer()
-                    .frame(height: 70) // 底部间距
+                .padding(.horizontal, 20)
             }
+            .padding(.top, 20)
+            .padding(.bottom, 30)
             .onChange(of: selectedStickerIndex) { _, newIndex in
                 withAnimation(.easeInOut(duration: 0.3)) {
                     proxy.scrollTo(newIndex, anchor: .center)
@@ -313,20 +265,47 @@ struct StickerDetailView: View {
     
     private var stickerInfoView: some View {
         VStack(spacing: 12) {
-            VStack(spacing: 8) {
-                // 潮玩名称（优先显示识别结果）
-                Text(currentSticker.displayName)
+            HStack {
+                Text(currentSticker.name)
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
-                    .multilineTextAlignment(.center)
                 
-                // 参考价格（如果有识别结果）
-                if let priceInfo = currentSticker.referencePrice {
-                    Text(priceInfo)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
+                AIEnhancementStatusIndicator(sticker: currentSticker)
+            }
+            
+            HStack {
+                HStack {
+                    Image(systemName: "tag.fill")
+                        .foregroundColor(.blue)
+                    Text(currentSticker.categoryName)
+                        .font(.subheadline)
+                        .foregroundColor(.blue)
+                }
+                
+                Spacer()
+                
+                Button(action: {
+                    HapticFeedbackManager.shared.lightTap()
+                    showingSeriesView = true
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "cube.box.fill")
+                            .font(.system(size: 12))
+                        Text("查看系列")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(
+                        LinearGradient(
+                            gradient: Gradient(colors: [Color.blue, Color.purple]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(12)
                 }
             }
             
@@ -437,13 +416,6 @@ struct StickerDetailView: View {
                         // AI识别完成后的回调
                         currentSticker.aiRecognitionResult = aiResult
                         currentSticker.labubuInfo = nil // 清空旧格式结果
-                        
-                        // 🎯 自动更新潮玩名称为识别结果的模型名称
-                        if aiResult.isSuccessful, let bestMatch = aiResult.bestMatch {
-                            currentSticker.name = bestMatch.name
-                            print("✅ 自动更新潮玩名称为: \(bestMatch.name)")
-                        }
-                        
                         saveRecognitionStateForCurrentSticker() // 保存状态
                         showingLabubuRecognition = true
                     }
