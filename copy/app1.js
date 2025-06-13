@@ -7,9 +7,6 @@ createApp({
             // 连接状态
             isConnected: false,
             supabaseClient: null,
-            connectionCached: false, // 连接缓存状态
-            lastConnectionCheck: null, // 最后连接检查时间
-            cacheValidDuration: 5 * 60 * 1000, // 缓存有效期：5分钟
             
             // 配置
             config: {
@@ -70,7 +67,7 @@ createApp({
             },
             
             // 特征描述输入模式
-            featureInputMode: 'json', // 'text' 或 'json' - 默认使用JSON模式
+            featureInputMode: 'text', // 'text' 或 'json'
             jsonFeatureInput: '',
             jsonParseStatus: null,
             
@@ -93,6 +90,11 @@ createApp({
                 condition: 'new'
             },
             
+            // 特征描述输入模式
+            featureInputMode: 'text', // 'text' 或 'json'
+            jsonFeatureInput: '',
+            jsonParseStatus: null,
+            
             // 导入功能
             importPreview: null
         }
@@ -105,116 +107,14 @@ createApp({
     },
 
     mounted() {
-        // 尝试从缓存恢复连接
-        this.tryRestoreConnection();
+        // 尝试自动连接
+        if (this.config.supabaseUrl && this.config.serviceRoleKey) {
+            this.connectToSupabase();
+        }
     },
     
     methods: {
         // ===== 连接管理 =====
-        
-        // 尝试从缓存恢复连接
-        async tryRestoreConnection() {
-            try {
-                // 检查是否有缓存的连接信息
-                const cachedConnectionTime = localStorage.getItem('connection_time');
-                const cachedConnectionStatus = localStorage.getItem('connection_status');
-                
-                if (cachedConnectionTime && cachedConnectionStatus === 'connected') {
-                    const cacheAge = Date.now() - parseInt(cachedConnectionTime);
-                    
-                    // 如果缓存仍然有效（5分钟内）
-                    if (cacheAge < this.cacheValidDuration) {
-                        console.log('🔄 使用缓存连接，剩余有效时间:', Math.round((this.cacheValidDuration - cacheAge) / 1000), '秒');
-                        
-                        if (this.config.supabaseUrl && this.config.serviceRoleKey) {
-                            // 创建客户端但跳过验证
-                            this.supabaseClient = createClient(
-                                this.config.supabaseUrl,
-                                this.config.serviceRoleKey
-                            );
-                            
-                            this.isConnected = true;
-                            this.connectionCached = true;
-                            this.lastConnectionCheck = parseInt(cachedConnectionTime);
-                            
-                            // 快速检查存储桶（跳过上传测试）
-                            await this.checkStorageBucket(true);
-                            
-                            // 静默加载数据（不显示loading）
-                            await this.loadSeries();
-                            
-                            this.showAlert('已从缓存恢复连接', 'success');
-                            return;
-                        }
-                    }
-                }
-                
-                // 缓存无效或不存在，尝试正常连接
-                if (this.config.supabaseUrl && this.config.serviceRoleKey) {
-                    await this.connectToSupabase();
-                }
-                
-            } catch (error) {
-                console.warn('缓存恢复失败，尝试正常连接:', error);
-                if (this.config.supabaseUrl && this.config.serviceRoleKey) {
-                    await this.connectToSupabase();
-                }
-            }
-        },
-        
-        // 检查连接是否仍然有效
-        async validateConnection() {
-            if (!this.supabaseClient || !this.isConnected) {
-                this.showAlert('当前未连接到数据库', 'error');
-                return false;
-            }
-            
-            try {
-                this.loading = true;
-                const { data, error } = await this.supabaseClient
-                    .from('labubu_series')
-                    .select('count')
-                    .limit(1);
-                
-                if (!error) {
-                    this.showAlert('连接验证成功！', 'success');
-                    return true;
-                } else {
-                    this.showAlert(`连接验证失败: ${error.message}`, 'error');
-                    // 清除缓存，因为连接已失效
-                    this.clearConnectionCache();
-                    this.isConnected = false;
-                    return false;
-                }
-            } catch (error) {
-                console.warn('连接验证失败:', error);
-                this.showAlert(`连接验证失败: ${error.message}`, 'error');
-                // 清除缓存，因为连接已失效
-                this.clearConnectionCache();
-                this.isConnected = false;
-                return false;
-            } finally {
-                this.loading = false;
-            }
-        },
-        
-        // 强制重新连接
-        async forceReconnect() {
-            // 清除缓存
-            this.clearConnectionCache();
-            
-            // 重新连接
-            await this.connectToSupabase();
-        },
-        
-        // 清除连接缓存
-        clearConnectionCache() {
-            localStorage.removeItem('connection_time');
-            localStorage.removeItem('connection_status');
-            this.connectionCached = false;
-            this.lastConnectionCheck = null;
-        },
-        
         async connectToSupabase() {
             try {
                 this.loading = true;
@@ -242,15 +142,11 @@ createApp({
                 // 检查存储桶
                 await this.checkStorageBucket();
                 
-                // 保存配置和连接缓存
+                // 保存配置
                 localStorage.setItem('supabase_url', this.config.supabaseUrl);
                 localStorage.setItem('service_role_key', this.config.serviceRoleKey);
-                localStorage.setItem('connection_time', Date.now().toString());
-                localStorage.setItem('connection_status', 'connected');
                 
                 this.isConnected = true;
-                this.connectionCached = false; // 这是新的连接，不是缓存
-                this.lastConnectionCheck = Date.now();
                 this.showAlert('成功连接到Supabase数据库！', 'success');
                 
                 // 加载初始数据
@@ -264,7 +160,7 @@ createApp({
             }
         },
         
-        async checkStorageBucket(skipUploadTest = false) {
+        async checkStorageBucket() {
             try {
                 console.log('🔍 检查存储桶配置...');
                 
@@ -286,12 +182,6 @@ createApp({
                 
                 console.log('✅ 存储桶检查通过:', labubuBucket);
                 
-                // 如果是缓存连接，跳过上传测试以提高速度
-                if (skipUploadTest) {
-                    console.log('⚡ 缓存模式：跳过上传权限测试');
-                    return;
-                }
-                
                 // 测试上传权限（创建一个小的测试文件）
                 const testFileName = `test_${Date.now()}.txt`;
                 const testFile = new Blob(['test'], { type: 'text/plain' });
@@ -305,8 +195,7 @@ createApp({
                 
                 if (uploadError) {
                     console.warn('⚠️ 存储桶上传测试失败:', uploadError);
-                    // 不显示警告，因为这个测试经常失败但不影响实际功能
-                    // this.showAlert(`警告：存储桶上传权限测试失败 - ${uploadError.message}`, 'warning');
+                    this.showAlert(`警告：存储桶上传权限测试失败 - ${uploadError.message}`, 'warning');
                 } else {
                     console.log('✅ 存储桶上传权限测试通过');
                     
@@ -318,8 +207,7 @@ createApp({
                 
             } catch (error) {
                 console.warn('⚠️ 存储桶检查失败:', error);
-                // 不显示警告，避免干扰用户体验
-                // this.showAlert(`警告：存储桶检查失败 - ${error.message}`, 'warning');
+                this.showAlert(`警告：存储桶检查失败 - ${error.message}`, 'warning');
             }
         },
         
@@ -432,190 +320,32 @@ createApp({
             try {
                 this.loading = true;
                 
-                // 先尝试简单查询，看看是否有数据
-                console.log('🔍 开始查询模型数据...');
-                
                 let query = this.supabaseClient
-                    .from('labubu_models')
+                    .from('labubu_complete_info')
                     .select('*');
                 
                 if (this.selectedSeriesFilter) {
                     query = query.eq('series_id', this.selectedSeriesFilter);
                 }
                 
-                // 先不加is_active过滤，看看是否有数据
-                const { data: modelsData, error: modelsError } = await query
-                    .order('created_at', { ascending: false });
+                const { data, error } = await query.order('series_name').order('name');
                 
-                if (modelsError) {
-                    console.error('❌ 查询模型数据失败:', modelsError);
-                    throw modelsError;
-                }
+                if (error) throw error;
                 
-                console.log('📊 原始模型数据:', modelsData?.length || 0, modelsData);
-                
-                if (!modelsData || modelsData.length === 0) {
-                    this.modelsList = [];
-                    console.log('⚠️ 没有找到任何模型数据');
-                    return;
-                }
-                
-                // 获取系列信息
-                const { data: seriesData, error: seriesError } = await this.supabaseClient
-                    .from('labubu_series')
-                    .select('*');
-                
-                if (seriesError) {
-                    console.error('❌ 查询系列数据失败:', seriesError);
-                    // 即使系列查询失败，也显示模型数据
-                }
-                
-                console.log('📊 系列数据:', seriesData?.length || 0, seriesData);
-                
-                // 获取所有模型的主图
-                const modelIds = modelsData.map(m => m.id);
-                let imagesData = [];
-                if (modelIds.length > 0) {
-                    const { data: images, error: imagesError } = await this.supabaseClient
-                        .from('labubu_reference_images')
-                        .select('model_id, image_url, is_primary')
-                        .in('model_id', modelIds)
-                        .eq('is_primary', true);
-                    
-                    if (!imagesError) {
-                        imagesData = images || [];
-                    }
-                }
-
-                // 手动关联数据
-                this.modelsList = modelsData.map(model => {
-                    const series = seriesData?.find(s => s.id === model.series_id);
-                    const primaryImage = imagesData.find(img => img.model_id === model.id);
-                    return {
-                        ...model,
-                        series_name: series?.name || '未知系列',
-                        series_name_en: series?.name_en || 'Unknown Series',
-                        series_description: series?.description || '',
-                        primary_image_url: primaryImage?.image_url || null
-                    };
-                });
-                
+                this.modelsList = data || [];
                 console.log('加载模型数据:', this.modelsList.length);
-                console.log('📋 最终模型列表:', this.modelsList);
                 
             } catch (error) {
-                console.error('❌ 加载模型失败:', error);
                 this.showAlert(`加载模型失败: ${error.message}`, 'error');
             } finally {
                 this.loading = false;
             }
         },
         
-        async editModel(model) {
-            console.log('📝 开始编辑模型:', model);
-            
+        editModel(model) {
             this.editingModel = model;
             this.modelForm = { ...model };
-            
-            // 确保series_id是字符串格式，以便在下拉框中正确显示
-            if (this.modelForm.series_id !== null && this.modelForm.series_id !== undefined) {
-                this.modelForm.series_id = this.modelForm.series_id.toString();
-            } else {
-                // 如果series_id为null，设置为第一个可用系列的ID
-                if (this.seriesList && this.seriesList.length > 0) {
-                    this.modelForm.series_id = this.seriesList[0].id.toString();
-                } else {
-                    this.modelForm.series_id = '';
-                }
-            }
-            
-            console.log('📋 编辑表单数据:', this.modelForm);
-            console.log('📋 当前系列列表:', this.seriesList);
-            console.log('📋 模型系列ID:', this.modelForm.series_id, '类型:', typeof this.modelForm.series_id);
-            
-            // 智能检测特征描述格式并设置输入模式
-            if (model.feature_description && this.isJSONFormat(model.feature_description)) {
-                this.featureInputMode = 'json';
-                this.jsonFeatureInput = model.feature_description;
-            } else {
-                this.featureInputMode = 'json'; // 默认使用JSON模式
-                // 如果现有描述不是JSON格式，提供默认模板
-                this.jsonFeatureInput = `{
-  "primary_colors": [
-    {
-      "color": "#FFB6C1",
-      "percentage": 0.6,
-      "region": "body"
-    }
-  ],
-  "shape_descriptor": {
-    "aspect_ratio": 1.2,
-    "roundness": 0.8,
-    "symmetry": 0.9,
-    "complexity": 0.5
-  },
-  "texture_features": {
-    "smoothness": 0.7,
-    "roughness": 0.3,
-    "patterns": ["standard"],
-    "material_type": "plush"
-  },
-  "special_marks": [],
-  "description": "${model.feature_description || '请在此处描述模型的特征'}"
-}`;
-            }
-            
-            // 加载模型的现有图片
-            await this.loadModelImages(model.id);
-            
             this.showModelModal = true;
-        },
-        
-        async loadModelImages(modelId) {
-            try {
-                console.log('📸 加载模型图片，模型ID:', modelId);
-                
-                const { data: images, error } = await this.supabaseClient
-                    .from('labubu_reference_images')
-                    .select('*')
-                    .eq('model_id', modelId)
-                    .order('sort_order');
-                
-                if (error) {
-                    console.error('❌ 加载模型图片失败:', error);
-                    return;
-                }
-                
-                console.log('📋 模型现有图片:', images);
-                
-                if (images && images.length > 0) {
-                    // 将现有图片转换为编辑界面可用的格式
-                    this.uploadedImages = images.map(img => ({
-                        id: img.id,
-                        url: img.image_url,
-                        type: img.image_type || 'front',
-                        isPrimary: img.is_primary || false,
-                        isExisting: true // 标记为现有图片
-                    }));
-                    
-                    // 设置图片预览URL（保持与uploadedImages的id对应关系）
-                    this.imagePreviewUrls = this.uploadedImages.map(img => ({
-                        id: img.id,
-                        url: img.url
-                    }));
-                    
-                    console.log('✅ 已加载现有图片:', this.uploadedImages);
-                } else {
-                    this.uploadedImages = [];
-                    this.imagePreviewUrls = [];
-                    console.log('ℹ️ 该模型暂无图片');
-                }
-                
-            } catch (error) {
-                console.error('❌ 加载模型图片异常:', error);
-                this.uploadedImages = [];
-                this.imagePreviewUrls = [];
-            }
         },
         
         async saveModel() {
@@ -625,7 +355,7 @@ createApp({
                 this.uploadProgress = 0;
                 
                 // 验证必填字段
-                if (!this.modelForm.series_id || this.modelForm.series_id === '') {
+                if (!this.modelForm.series_id) {
                     throw new Error('请选择系列');
                 }
                 if (!this.modelForm.name) {
@@ -646,7 +376,7 @@ createApp({
                 
                 // 第三步：保存模型数据 (80%)
                 const modelData = {
-                    series_id: (this.modelForm.series_id && this.modelForm.series_id !== '') ? this.modelForm.series_id : null,
+                    series_id: parseInt(this.modelForm.series_id),
                     name: this.modelForm.name, // 统一使用name字段
                     name_en: this.extractEnglishName(this.modelForm.name), // 自动提取英文部分
                     model_number: this.modelForm.model_number || null,
@@ -697,28 +427,11 @@ createApp({
                     const modelId = result.data[0].id;
                     console.log(`📸 开始保存 ${referenceImages.length} 张图片到数据库，模型ID: ${modelId}`);
                     
-                    // 如果是编辑模式，先删除旧的图片记录
-                    if (this.editingModel) {
-                        console.log('🗑️ 编辑模式：先删除旧的图片记录');
-                        const { error: deleteError } = await this.supabaseClient
-                            .from('labubu_reference_images')
-                            .delete()
-                            .eq('model_id', modelId);
-                        
-                        if (deleteError) {
-                            console.warn('⚠️ 删除旧图片记录失败:', deleteError);
-                        } else {
-                            console.log('✅ 旧图片记录删除成功');
-                        }
-                    }
-                    
                     // 为每张图片添加模型ID
                     const imageRecords = referenceImages.map(img => ({
                         ...img,
                         model_id: modelId
                     }));
-                    
-                    console.log('📋 准备插入的图片数据:', imageRecords);
                     
                     const { data: imageData, error: imageError } = await this.supabaseClient
                         .from('labubu_reference_images')
@@ -727,12 +440,6 @@ createApp({
                     
                     if (imageError) {
                         console.error('❌ 图片数据保存失败:', imageError);
-                        console.error('❌ 错误详情:', {
-                            message: imageError.message,
-                            details: imageError.details,
-                            hint: imageError.hint,
-                            code: imageError.code
-                        });
                         this.showAlert(`模型保存成功，但图片数据保存失败: ${imageError.message}`, 'warning');
                     } else {
                         console.log('✅ 图片数据保存成功:', imageData);
@@ -780,7 +487,6 @@ createApp({
         },
         
         closeModelModal() {
-            console.log('🔒 关闭模型编辑模态框');
             this.showModelModal = false;
             this.editingModel = null;
             this.uploadedImages = [];
@@ -800,33 +506,6 @@ createApp({
                 model_number: '',
                 tags: []
             };
-            
-            // 重置为JSON模式并提供默认模板
-            this.featureInputMode = 'json';
-            this.jsonFeatureInput = `{
-  "primary_colors": [
-    {
-      "color": "#FFB6C1",
-      "percentage": 0.6,
-      "region": "body"
-    }
-  ],
-  "shape_descriptor": {
-    "aspect_ratio": 1.2,
-    "roundness": 0.8,
-    "symmetry": 0.9,
-    "complexity": 0.5
-  },
-  "texture_features": {
-    "smoothness": 0.7,
-    "roughness": 0.3,
-    "patterns": ["standard"],
-    "material_type": "plush"
-  },
-  "special_marks": [],
-  "description": "请在此处描述模型的特征"
-}`;
-            this.jsonParseStatus = null;
         },
         
         // ===== 图片管理 =====
@@ -1129,31 +808,13 @@ createApp({
                 const imageData = this.uploadedImages[i];
                 
                 try {
-                    // 检查是否为现有图片（编辑模式下已存在的图片）
-                    if (imageData.isExisting) {
-                        console.log(`📋 保留现有图片: ${imageData.url}`);
-                        referenceImages.push({
-                            image_url: imageData.url,
-                            image_type: imageData.type || 'front',
-                            is_primary: imageData.isPrimary || false,
-                            sort_order: 0
-                        });
-                        continue;
-                    }
-                    
-                    // 处理新上传的图片
-                    if (!imageData.file) {
-                        console.warn('⚠️ 图片数据缺少文件对象:', imageData);
-                        continue;
-                    }
-                    
                     // 生成唯一文件名
                     const timestamp = Date.now();
                     const randomId = Math.random().toString(36).substring(2);
                     const fileExtension = imageData.file.name.split('.').pop().toLowerCase();
                     const fileName = `labubu_${timestamp}_${randomId}.${fileExtension}`;
                     
-                    console.log(`📤 正在上传新图片: ${fileName}`);
+                    console.log(`📤 正在上传图片: ${fileName}`);
                     console.log(`📋 文件信息:`, {
                         name: imageData.file.name,
                         size: imageData.file.size,
@@ -1211,26 +872,24 @@ createApp({
                             .from('labubu-images')
                             .getPublicUrl(fileName);
                         
-                        console.log(`✅ 新图片上传成功: ${urlData.publicUrl}`);
-                        
-                        // 如果是第一张图片且没有设置主图，自动设为主图
-                        const isPrimary = imageData.is_primary || (referenceImages.length === 0 && !this.editingModel);
+                        console.log(`✅ 图片上传成功: ${urlData.publicUrl}`);
                         
                         referenceImages.push({
+                            id: this.generateUUID(),
                             image_url: urlData.publicUrl,
-                            image_type: this.mapImageType(imageData.type),
-                            is_primary: isPrimary,
-                            sort_order: referenceImages.length
+                            angle: this.mapImageType(imageData.type),
+                            is_primary: imageData.is_primary,
+                            quality_score: 0.9,
+                            upload_date: new Date().toISOString()
                         });
                     }
                 } catch (error) {
                     console.error('❌ 处理图片失败:', error);
-                    const fileName = imageData.file ? imageData.file.name : '未知图片';
-                    this.showAlert(`图片 ${fileName} 处理失败: ${error.message}`, 'error');
+                    this.showAlert(`图片 ${imageData.file.name} 处理失败: ${error.message}`, 'error');
                 }
             }
             
-            console.log(`📊 处理完成，共 ${referenceImages.length} 张图片（包含现有图片和新上传图片）`);
+            console.log(`📊 成功上传 ${referenceImages.length} 张图片`);
             return referenceImages;
         },
         
