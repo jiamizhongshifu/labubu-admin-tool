@@ -319,35 +319,35 @@ struct LabubuModelData: Codable, Identifiable {
     let id: String
     let name: String
     let nameEn: String?
-    let nameCN: String
-    let seriesId: String
-    let seriesName: String
+    let seriesId: String?
+    var seriesName: String?
+    var seriesNameEn: String?
+    var seriesDescription: String?
     let modelNumber: String?
-    let variant: String
-    let rarity: String
-    let releaseDate: String?
-    let originalPrice: Double?
-    let currentPrice: Double?
     let description: String?
-    let tags: [String]
+    let rarityLevel: String
+    let estimatedPriceMin: Double?
+    let estimatedPriceMax: Double?
+    let currency: String?
     let isActive: Bool
     let createdAt: String
     let updatedAt: String
+    let featureDescription: String?
     
     enum CodingKeys: String, CodingKey {
-        case id, name, description, tags
+        case id, name, description, currency
         case nameEn = "name_en"
-        case nameCN = "name_cn"
         case seriesId = "series_id"
-        case seriesName = "series_name"
         case modelNumber = "model_number"
-        case variant, rarity
-        case releaseDate = "release_date"
-        case originalPrice = "original_price"
-        case currentPrice = "current_price"
+        case rarityLevel = "rarity_level"
+        case estimatedPriceMin = "estimated_price_min"
+        case estimatedPriceMax = "estimated_price_max"
         case isActive = "is_active"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case featureDescription = "feature_description"
+        // 注意：seriesName, seriesNameEn, seriesDescription 不在CodingKeys中
+        // 因为它们不是数据库字段，而是手动关联的
     }
     
     /// 转换为本地LabubuModel
@@ -357,17 +357,17 @@ struct LabubuModelData: Codable, Identifiable {
         return LabubuModel(
             id: id,
             name: name,
-            nameCN: nameCN,
-            seriesId: seriesId,
-            variant: LabubuVariant(rawValue: variant) ?? .standard,
-            rarity: RarityLevel(rawValue: rarity) ?? .common,
-            releaseDate: releaseDate.flatMap { dateFormatter.date(from: $0) },
-            originalPrice: originalPrice,
-            currentMarketPrice: currentPrice.map { price in
+            nameCN: name, // 使用name作为中文名
+            seriesId: seriesId ?? "",
+            variant: .standard, // 默认变体
+            rarity: RarityLevel(rawValue: rarityLevel) ?? .common,
+            releaseDate: nil, // 数据库中没有release_date字段
+            originalPrice: estimatedPriceMin,
+            currentMarketPrice: estimatedPriceMax.map { price in
                 MarketPrice(
                     average: price,
-                    min: price * 0.8,
-                    max: price * 1.2,
+                    min: estimatedPriceMin ?? price * 0.8,
+                    max: price,
                     lastUpdated: Date(),
                     source: "Supabase"
                 )
@@ -393,7 +393,7 @@ struct LabubuModelData: Codable, Identifiable {
                 specialMarks: [],
                 featureVector: []
             ),
-            tags: tags,
+            tags: [], // 数据库中没有tags字段，使用空数组
             description: description
         )
     }

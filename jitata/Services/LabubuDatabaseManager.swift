@@ -155,6 +155,25 @@ class LabubuDatabaseManager: ObservableObject {
         }
     }
     
+    /// 获取模型的参考图片URL列表
+    func getModelReferenceImages(modelId: String) async -> [String] {
+        // 尝试从云端获取图片
+        do {
+            let images = try await supabaseService.fetchModelImages(modelId: modelId)
+            return images
+        } catch {
+            print("⚠️ [数据库管理器] 获取模型图片失败: \(error)")
+            
+            // 如果云端获取失败，返回本地模型的参考图片
+            return queue.sync {
+                if let model = models.first(where: { $0.id == modelId }) {
+                    return model.referenceImages.map { $0.imageURL }
+                }
+                return []
+            }
+        }
+    }
+    
     /// 刷新数据库（优先从云端加载，失败时使用预置数据）
     func loadDatabase() {
         Task {
@@ -223,13 +242,13 @@ class LabubuDatabaseManager: ObservableObject {
                 id: supabaseModel.id,
                 name: supabaseModel.nameEn ?? supabaseModel.name,
                 nameCN: supabaseModel.name,
-                seriesId: supabaseModel.seriesId,
-                variant: convertRarityToVariant(supabaseModel.rarity),
-                rarity: convertStringToRarity(supabaseModel.rarity),
+                seriesId: supabaseModel.seriesId ?? "",
+                variant: convertRarityToVariant(supabaseModel.rarityLevel),
+                rarity: convertStringToRarity(supabaseModel.rarityLevel),
                 releaseDate: nil, // LabubuModelData中没有releaseYear字段
-                originalPrice: supabaseModel.originalPrice,
+                originalPrice: supabaseModel.estimatedPriceMin,
                 visualFeatures: createDefaultVisualFeatures(), // 暂时使用默认值
-                tags: supabaseModel.tags,
+                tags: [], // 数据库中没有tags字段，使用空数组
                 description: supabaseModel.description
             )
         }

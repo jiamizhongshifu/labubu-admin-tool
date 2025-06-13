@@ -29,6 +29,13 @@ struct StickerDetailView: View {
     @State private var showingBackgroundRemoval = false
     @State private var showingLabubuRecognition = false
     @State private var labubuRecognitionResult: LabubuRecognitionResult?
+    @State private var labubuAIRecognitionResult: LabubuAIRecognitionResult?
+    @State private var hasRecognitionResult = false
+    
+    // 为每个贴纸维护独立的识别状态
+    @State private var stickerRecognitionStates: [String: Bool] = [:]
+    @State private var stickerAIResults: [String: LabubuAIRecognitionResult] = [:]
+    @State private var stickerResults: [String: LabubuRecognitionResult] = [:]
     @StateObject private var labubuService = LabubuRecognitionService.shared
     
     // 获取当天收集的贴纸（最新的在最左边）
@@ -91,6 +98,9 @@ struct StickerDetailView: View {
             // 从贴纸对象中读取用户之前选择的比例
             selectedAspectRatio = currentSticker.preferredAspectRatio
             
+            // 加载当前贴纸的识别状态
+            loadRecognitionStateForCurrentSticker()
+            
             // 🎬 监听视频重新生成通知
             NotificationCenter.default.addObserver(
                 forName: NSNotification.Name("VideoRegenerationRequested"),
@@ -132,8 +142,18 @@ struct StickerDetailView: View {
             FullScreenImageView(sticker: currentSticker, isPresented: $showingFullScreenImage)
         }
         .sheet(isPresented: $showingLabubuRecognition) {
-            if let result = labubuRecognitionResult {
-                LabubuFamilyTreeView(recognitionResult: result)
+            if let aiResult = labubuAIRecognitionResult {
+                LabubuAIRecognitionResultView(result: aiResult) { newResult in
+                    // 重新识别完成后的回调
+                    labubuAIRecognitionResult = newResult
+                }
+            } else if let result = labubuRecognitionResult {
+                // 将传统识别结果转换为AI识别结果格式，统一使用新的结果页面
+                LabubuAIRecognitionResultView(result: convertToAIResult(result)) { newResult in
+                    // 重新识别完成后的回调
+                    labubuAIRecognitionResult = newResult
+                    labubuRecognitionResult = nil // 清空旧格式结果
+                }
             }
         }
     }
@@ -217,6 +237,8 @@ struct StickerDetailView: View {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     proxy.scrollTo(newIndex, anchor: .center)
                 }
+                // 切换贴纸时加载对应的识别状态
+                loadRecognitionStateForCurrentSticker()
             }
         }
     }
@@ -379,12 +401,73 @@ struct StickerDetailView: View {
     }
     
     private var labubuRecognitionButtonView: some View {
-        LabubuRecognitionButton(image: currentSticker.processedImage ?? UIImage()) { result in
-            // 识别完成后的回调
-            labubuRecognitionResult = result
-            showingLabubuRecognition = true
+        Group {
+            if hasRecognitionResult {
+                // 已有识别结果，显示查看结果按钮
+                viewRecognitionResultButton
+            } else {
+                // 没有识别结果，显示识别按钮
+                LabubuRecognitionButton(
+                    image: currentSticker.processedImage ?? UIImage(),
+                    onRecognitionComplete: { result in
+                        // 旧格式识别完成后的回调
+                        labubuRecognitionResult = result
+                        labubuAIRecognitionResult = nil // 清空AI结果
+                        hasRecognitionResult = true
+                        saveRecognitionStateForCurrentSticker() // 保存状态
+                        showingLabubuRecognition = true
+                    },
+                    onAIRecognitionComplete: { aiResult in
+                        // AI识别完成后的回调
+                        labubuAIRecognitionResult = aiResult
+                        labubuRecognitionResult = nil // 清空旧格式结果
+                        hasRecognitionResult = true
+                        saveRecognitionStateForCurrentSticker() // 保存状态
+                        showingLabubuRecognition = true
+                    }
+                )
+            }
         }
         .padding(.horizontal, 20)
+    }
+    
+    private var viewRecognitionResultButton: some View {
+        Button(action: {
+            HapticFeedbackManager.shared.lightTap()
+            showingLabubuRecognition = true
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.title2)
+                    .foregroundColor(.white)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("查看分析结果")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    
+                    Text("已完成Labubu识别")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.8))
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.title3)
+                    .foregroundColor(.white.opacity(0.7))
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(LinearGradient(
+                        gradient: Gradient(colors: [Color.green, Color.teal]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ))
+            )
+        }
     }
     
     @ViewBuilder
@@ -507,6 +590,85 @@ struct StickerDetailView: View {
         triggerEnhancement(with: defaultPrompt, using: .fluxKontext, aspectRatio: selectedAspectRatio)
     }
     
+    /// 将传统识别结果转换为AI识别结果格式
+    private func convertToAIResult(_ result: LabubuRecognitionResult) -> LabubuAIRecognitionResult {
+        // 创建AI分析结果
+        let aiAnalysis = LabubuAIAnalysis(
+            isLabubu: result.bestMatch != nil,
+            confidence: result.confidence,
+            detailedDescription: result.bestMatch?.model.description ?? "通过传统识别方法识别的Labubu模型",
+            visualFeatures: LabubuVisualFeatures(
+                dominantColors: ["#FFB6C1", "#FFFFFF"], // 默认颜色
+                bodyShape: "圆润",
+                headShape: "圆形",
+                earType: "尖耳",
+                surfaceTexture: "光滑",
+                patternType: "纯色",
+                estimatedSize: "小型"
+            ),
+            keyFeatures: result.bestMatch?.matchedFeatures ?? [],
+            seriesHints: result.bestMatch?.series?.name ?? "未知系列",
+            materialAnalysis: "毛绒材质",
+            styleAnalysis: "可爱风格",
+            conditionAssessment: "良好",
+            rarityHints: result.bestMatch?.model.rarity.displayName ?? "普通"
+        )
+        
+        // 创建数据库匹配结果
+        var matchResults: [LabubuDatabaseMatch] = []
+        
+        // 添加最佳匹配
+        if let bestMatch = result.bestMatch {
+            let dbMatch = LabubuDatabaseMatch(
+                model: convertToLabubuModelData(bestMatch.model),
+                similarity: result.confidence,
+                matchedFeatures: bestMatch.matchedFeatures
+            )
+            matchResults.append(dbMatch)
+        }
+        
+        // 添加备选项
+        for alternative in result.alternatives {
+            let dbMatch = LabubuDatabaseMatch(
+                model: convertToLabubuModelData(alternative),
+                similarity: max(0.1, result.confidence - 0.2), // 备选项置信度稍低
+                matchedFeatures: []
+            )
+            matchResults.append(dbMatch)
+        }
+        
+        return LabubuAIRecognitionResult(
+            originalImage: result.originalImage,
+            aiAnalysis: aiAnalysis,
+            matchResults: matchResults,
+            processingTime: result.processingTime,
+            timestamp: result.timestamp
+        )
+    }
+    
+    /// 将LabubuModel转换为LabubuModelData
+    private func convertToLabubuModelData(_ model: LabubuModel) -> LabubuModelData {
+        return LabubuModelData(
+            id: model.id,
+            name: model.nameCN,
+            nameEn: model.name,
+            seriesId: model.seriesId,
+            seriesName: nil,
+            seriesNameEn: nil,
+            seriesDescription: nil,
+            modelNumber: nil,
+            description: model.description,
+            rarityLevel: model.rarity.displayName,
+            estimatedPriceMin: model.originalPrice,
+            estimatedPriceMax: model.currentMarketPrice?.average,
+            currency: "CNY",
+            isActive: true,
+            createdAt: ISO8601DateFormatter().string(from: model.releaseDate ?? Date()),
+            updatedAt: ISO8601DateFormatter().string(from: Date()),
+            featureDescription: model.description
+        )
+    }
+    
     /// 增强AI
     private func enhanceWithAI(prompt: String, aspectRatio: String) async {
         guard let enhancedData = await ImageEnhancementService.shared.enhanceImage(
@@ -535,15 +697,10 @@ struct StickerDetailView: View {
                 let result = try await LabubuAIRecognitionService.shared.recognizeUserPhoto(image)
                 
                 await MainActor.run {
-                    if result.isSuccessful {
-                        // 保存识别结果到贴纸
-                        currentSticker.labubuInfo = convertToOldFormat(result)
-                        labubuRecognitionResult = convertToOldFormat(result)
-                        showingLabubuRecognition = true
-                    } else {
-                        // 显示未识别提示
-                        print("未识别为Labubu系列")
-                    }
+                    // 直接使用AI识别结果
+                    labubuAIRecognitionResult = result
+                    labubuRecognitionResult = nil // 清空旧格式结果
+                    showingLabubuRecognition = true
                 }
             } catch {
                 await MainActor.run {
@@ -559,6 +716,38 @@ struct StickerDetailView: View {
         // 由于LabubuRecognitionResult结构已简化，这里创建一个兼容的结果
         // 在实际应用中，应该统一使用新的AI识别结果格式
         return nil
+    }
+    
+    /// 重置识别状态
+    private func resetRecognitionState() {
+        hasRecognitionResult = false
+        labubuRecognitionResult = nil
+        labubuAIRecognitionResult = nil
+    }
+    
+    /// 获取当前贴纸的唯一标识
+    private var currentStickerKey: String {
+        return currentSticker.id.uuidString
+    }
+    
+    /// 加载当前贴纸的识别状态
+    private func loadRecognitionStateForCurrentSticker() {
+        let key = currentStickerKey
+        hasRecognitionResult = stickerRecognitionStates[key] ?? false
+        labubuAIRecognitionResult = stickerAIResults[key]
+        labubuRecognitionResult = stickerResults[key]
+    }
+    
+    /// 保存当前贴纸的识别状态
+    private func saveRecognitionStateForCurrentSticker() {
+        let key = currentStickerKey
+        stickerRecognitionStates[key] = hasRecognitionResult
+        if let aiResult = labubuAIRecognitionResult {
+            stickerAIResults[key] = aiResult
+        }
+        if let result = labubuRecognitionResult {
+            stickerResults[key] = result
+        }
     }
     
     // 格式化日期

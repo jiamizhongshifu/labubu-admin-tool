@@ -12,6 +12,15 @@ struct LabubuFamilyTreeView: View {
     let recognitionResult: LabubuRecognitionResult
     @Environment(\.dismiss) private var dismiss
     @StateObject private var databaseManager = LabubuDatabaseManager.shared
+    @State private var showingReRecognition = false
+    
+    // 重新识别的回调
+    let onReRecognition: ((LabubuRecognitionResult) -> Void)?
+    
+    init(recognitionResult: LabubuRecognitionResult, onReRecognition: ((LabubuRecognitionResult) -> Void)? = nil) {
+        self.recognitionResult = recognitionResult
+        self.onReRecognition = onReRecognition
+    }
     
     var body: some View {
         NavigationView {
@@ -37,11 +46,21 @@ struct LabubuFamilyTreeView: View {
             .navigationTitle("资料页")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("重新识别") {
+                        showingReRecognition = true
+                    }
+                    .foregroundColor(.blue)
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("完成") {
                         dismiss()
                     }
                 }
+            }
+            .sheet(isPresented: $showingReRecognition) {
+                reRecognitionView
             }
         }
     }
@@ -169,6 +188,55 @@ struct LabubuFamilyTreeView: View {
         .padding()
         .background(Color(.systemGray6))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+    
+    // MARK: - 重新识别视图
+    private var reRecognitionView: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                // 原始图片
+                Image(uiImage: recognitionResult.originalImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxHeight: 300)
+                    .cornerRadius(12)
+                    .shadow(radius: 4)
+                
+                Text("重新识别这张图片")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                
+                Text("将使用最新的识别算法重新分析这张图片")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                
+                Spacer()
+                
+                // 重新识别按钮
+                LabubuRecognitionButton(
+                    image: recognitionResult.originalImage,
+                    onRecognitionComplete: { newResult in
+                        // 识别完成后的回调
+                        showingReRecognition = false
+                        onReRecognition?(newResult)
+                        dismiss()
+                    }
+                )
+                
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("重新识别")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("取消") {
+                        showingReRecognition = false
+                    }
+                }
+            }
+        }
     }
 }
 

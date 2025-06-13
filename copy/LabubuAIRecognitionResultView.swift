@@ -13,7 +13,6 @@ struct LabubuAIRecognitionResultView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedMatchIndex = 0
     @State private var showingReRecognition = false
-    @State private var showingCorrection = false
     @State private var modelDetails: LabubuModelData?
     @State private var referenceImages: [String] = []
     @State private var priceHistory: [LabubuPriceHistory] = []
@@ -36,6 +35,11 @@ struct LabubuAIRecognitionResultView: View {
                     // 匹配结果 - 最重要的信息放在顶部
                     if !result.matchResults.isEmpty {
                         matchedModelMainSection
+                        
+                        // 如果有多个匹配结果，显示其他候选
+                        if result.matchResults.count > 1 {
+                            otherMatchesSection
+                        }
                     } else {
                         noMatchSection
                     }
@@ -66,9 +70,6 @@ struct LabubuAIRecognitionResultView: View {
             }
             .sheet(isPresented: $showingReRecognition) {
                 reRecognitionView
-            }
-            .sheet(isPresented: $showingCorrection) {
-                correctionView
             }
             .onAppear {
                 loadModelDetails()
@@ -106,7 +107,7 @@ struct LabubuAIRecognitionResultView: View {
             
             // 模型主图
             if !referenceImages.isEmpty {
-                CachedAsyncImage(url: URL(string: referenceImages[0])) { image in
+                AsyncImage(url: URL(string: referenceImages[0])) { image in
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fit)
@@ -141,6 +142,15 @@ struct LabubuAIRecognitionResultView: View {
             
             // 模型核心信息
             VStack(spacing: 12) {
+                // 系列名称
+                if let seriesId = selectedMatch.model.seriesId, !seriesId.isEmpty {
+                    Text("系列: \(seriesId)")
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.blue)
+                        .multilineTextAlignment(.center)
+                }
+                
                 // 模型名称
                 VStack(spacing: 4) {
                     Text(selectedMatch.model.name)
@@ -224,35 +234,27 @@ struct LabubuAIRecognitionResultView: View {
                     .cornerRadius(8)
                 }
                 
-                // 修正识别结果按钮（如果有多个候选）
-                if result.matchResults.count > 1 {
-                    Button(action: {
-                        showingCorrection = true
-                    }) {
-                        HStack {
-                            Image(systemName: "pencil.circle")
-                                .foregroundColor(.orange)
-                            
-                            Text("修正识别结果")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.orange)
-                            
-                            Spacer()
-                            
-                            Text("共\(result.matchResults.count)个候选")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(Color.orange.opacity(0.1))
-                        .cornerRadius(8)
+                // 模型编号
+                if let modelNumber = selectedMatch.model.modelNumber, !modelNumber.isEmpty {
+                    HStack {
+                        Image(systemName: "number")
+                            .foregroundColor(.secondary)
+                        
+                        Text("模型编号")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        Text(modelNumber)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
                 }
             }
         }
@@ -260,6 +262,86 @@ struct LabubuAIRecognitionResultView: View {
         .background(Color(.systemBackground))
         .cornerRadius(16)
         .shadow(radius: 4)
+    }
+    
+    // MARK: - 其他候选匹配结果部分
+    private var otherMatchesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("其他候选")
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            // 候选选择器
+            Picker("选择匹配", selection: $selectedMatchIndex) {
+                ForEach(0..<result.matchResults.count, id: \.self) { index in
+                    let match = result.matchResults[index]
+                    Text("候选 \(index + 1) - \(Int(match.similarity * 100))%")
+                        .tag(index)
+                }
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            
+            // 其他候选的简要信息
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(0..<result.matchResults.count, id: \.self) { index in
+                        if index != selectedMatchIndex {
+                            let match = result.matchResults[index]
+                            otherMatchCard(match, index: index)
+                        }
+                    }
+                }
+                .padding(.horizontal, 4)
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(radius: 2)
+    }
+    
+    // MARK: - 其他候选卡片
+    private func otherMatchCard(_ match: LabubuDatabaseMatch, index: Int) -> some View {
+        Button(action: {
+            selectedMatchIndex = index
+        }) {
+            VStack(spacing: 8) {
+                // 候选图片
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(.systemGray6))
+                    .frame(width: 80, height: 80)
+                    .overlay(
+                        VStack(spacing: 4) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 20))
+                                .foregroundColor(.secondary)
+                            Text("候选\(index + 1)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    )
+                    .cornerRadius(8)
+                
+                // 候选信息
+                VStack(spacing: 2) {
+                    Text(match.model.name)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                    
+                    Text("\(Int(match.similarity * 100))%")
+                        .font(.caption2)
+                        .foregroundColor(.blue)
+                        .fontWeight(.bold)
+                }
+            }
+        }
+        .frame(width: 100)
+        .padding(8)
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+        .buttonStyle(PlainButtonStyle())
     }
     
     // MARK: - 原始图片对比部分
@@ -298,7 +380,7 @@ struct LabubuAIRecognitionResultView: View {
                         .foregroundColor(.secondary)
                     
                     if !result.matchResults.isEmpty && !referenceImages.isEmpty {
-                        CachedAsyncImage(url: URL(string: referenceImages[0])) { image in
+                        AsyncImage(url: URL(string: referenceImages[0])) { image in
                             image
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
@@ -399,160 +481,30 @@ struct LabubuAIRecognitionResultView: View {
         .shadow(radius: 2)
     }
     
+
+    
+
+    
     // MARK: - 无匹配结果部分
     private var noMatchSection: some View {
-        VStack(spacing: 16) {
-            // 状态图标和标题
-            HStack {
-                Image(systemName: result.aiAnalysis.isLabubu ? "exclamationmark.triangle.fill" : "questionmark.circle.fill")
-                    .foregroundColor(result.aiAnalysis.isLabubu ? .orange : .red)
-                    .font(.title2)
-                
-                Text(result.aiAnalysis.isLabubu ? "识别为Labubu但未找到匹配" : "未识别为Labubu")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(result.aiAnalysis.isLabubu ? .orange : .red)
-                
-                Spacer()
-                
-                if result.aiAnalysis.confidence > 0 {
-                    Text("\(Int(result.aiAnalysis.confidence * 100))% 置信度")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.secondary.opacity(0.1))
-                        .cornerRadius(20)
-                }
-            }
+        VStack(spacing: 12) {
+            Image(systemName: "questionmark.circle")
+                .font(.system(size: 40))
+                .foregroundColor(.orange)
             
-            // AI分析摘要
-            if !result.aiAnalysis.detailedDescription.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("AI分析结果:")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                    
-                    Text(result.aiAnalysis.detailedDescription)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(4)
-                        .multilineTextAlignment(.leading)
-                }
-                .padding()
-                .background(Color(.systemGray5))
-                .cornerRadius(12)
-            }
+            Text("未找到匹配")
+                .font(.headline)
+                .foregroundColor(.primary)
             
-            // 说明文字和建议
-            VStack(spacing: 12) {
-                if result.aiAnalysis.isLabubu {
-                    VStack(spacing: 4) {
-                        Text("这看起来是Labubu，但数据库中暂未找到匹配的模型")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                        
-                        Text("可能是新款、限定款或稀有款")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    
-                    // 改进建议
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("改进建议:")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(.primary)
-                        
-                        Text("• 尝试从正面角度重新拍摄")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        Text("• 确保光线充足，避免阴影")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        Text("• 将Labubu放在简洁背景前")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.horizontal)
-                } else {
-                    VStack(spacing: 4) {
-                        Text("这可能不是Labubu玩具")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                        
-                        Text("或者图片角度、光线可能影响了识别效果")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    
-                    // 改进建议
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("如果确实是Labubu，请尝试:")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(.primary)
-                        
-                        Text("• 确保拍摄的是完整的Labubu玩具")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        Text("• 避免遮挡关键特征（头部、身体）")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        Text("• 使用更清晰的图片")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.horizontal)
-                }
-            }
-            
-            // 操作按钮
-            HStack(spacing: 16) {
-                Button(action: {
-                    showingReRecognition = true
-                }) {
-                    HStack {
-                        Image(systemName: "arrow.clockwise")
-                        Text("重新识别")
-                    }
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(Color.blue)
-                    .cornerRadius(20)
-                }
-                
-                if result.aiAnalysis.isLabubu {
-                    Button(action: {
-                        showingCorrection = true
-                    }) {
-                        HStack {
-                            Image(systemName: "plus.circle")
-                            Text("手动添加")
-                        }
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.blue)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .background(Color.blue.opacity(0.1))
-                        .cornerRadius(20)
-                    }
-                }
-            }
+            Text("AI识别到这是Labubu，但在数据库中未找到匹配的模型")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(16)
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(radius: 2)
     }
     
     // MARK: - 辅助方法
@@ -609,28 +561,23 @@ struct LabubuAIRecognitionResultView: View {
         let selectedMatch = result.matchResults[selectedMatchIndex]
         isLoadingDetails = true
         
-        // 先检查URL缓存
-        if let cachedUrl = ImageCacheManager.shared.getCachedImageUrl(for: selectedMatch.model.id) {
-            self.referenceImages = [cachedUrl]
-            self.isLoadingDetails = false
-            print("📷 使用缓存的模型图片URL: \(cachedUrl)")
-            return
-        }
-        
         // 从数据库管理器获取模型的参考图片
         Task {
-            let images = await databaseManager.getModelReferenceImages(modelId: selectedMatch.model.id)
-            
-            await MainActor.run {
-                self.referenceImages = images
-                self.isLoadingDetails = false
+            do {
+                // 尝试从数据库获取模型的参考图片
+                let images = await databaseManager.getModelReferenceImages(modelId: selectedMatch.model.id)
                 
-                // 缓存第一张图片的URL
-                if let firstImage = images.first {
-                    ImageCacheManager.shared.cacheImageUrl(firstImage, for: selectedMatch.model.id)
+                await MainActor.run {
+                    self.referenceImages = images
+                    self.isLoadingDetails = false
                 }
-                
-                print("📷 加载模型图片完成: \(self.referenceImages.count) 张图片")
+            } catch {
+                print("❌ 加载模型参考图片失败: \(error)")
+                await MainActor.run {
+                    // 如果加载失败，使用空数组
+                    self.referenceImages = []
+                    self.isLoadingDetails = false
+                }
             }
         }
     }
@@ -703,235 +650,6 @@ struct LabubuAIRecognitionResultView: View {
             return .red
         default:
             return .secondary
-        }
-    }
-    
-    // MARK: - 修正识别结果视图
-    private var correctionView: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // 当前选择的模型
-                VStack(spacing: 16) {
-                    Text("当前识别结果")
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    
-                    let currentMatch = result.matchResults[selectedMatchIndex]
-                    
-                    HStack(spacing: 12) {
-                        // 当前模型图片
-                        if !referenceImages.isEmpty {
-                            CachedAsyncImage(url: URL(string: referenceImages[0])) { image in
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                            } placeholder: {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color(.systemGray6))
-                                    .overlay(ProgressView())
-                            }
-                            .frame(width: 80, height: 80)
-                            .cornerRadius(8)
-                        } else {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color(.systemGray6))
-                                .frame(width: 80, height: 80)
-                                .overlay(
-                                    Image(systemName: "photo")
-                                        .foregroundColor(.secondary)
-                                )
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(currentMatch.model.name)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .lineLimit(2)
-                            
-                            Text("\(Int(currentMatch.similarity * 100))% 匹配")
-                                .font(.caption)
-                                .foregroundColor(.blue)
-                                .fontWeight(.bold)
-                        }
-                        
-                        Spacer()
-                        
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                            .font(.title2)
-                    }
-                    .padding()
-                    .background(Color.green.opacity(0.1))
-                    .cornerRadius(12)
-                }
-                .padding()
-                
-                Divider()
-                
-                // 其他候选模型列表
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("选择其他候选模型")
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                        .padding(.horizontal)
-                        .padding(.top)
-                    
-                    ScrollView {
-                        LazyVStack(spacing: 8) {
-                            ForEach(0..<result.matchResults.count, id: \.self) { index in
-                                if index != selectedMatchIndex {
-                                    let match = result.matchResults[index]
-                                    candidateModelRow(match, index: index)
-                                }
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-                }
-            }
-            .navigationTitle("修正识别结果")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("完成") {
-                        showingCorrection = false
-                    }
-                }
-            }
-        }
-    }
-    
-    // MARK: - 候选模型行
-    private func candidateModelRow(_ match: LabubuDatabaseMatch, index: Int) -> some View {
-        Button(action: {
-            selectedMatchIndex = index
-            loadModelDetails() // 重新加载新选择模型的详细信息
-            showingCorrection = false
-        }) {
-            HStack(spacing: 12) {
-                // 候选模型图片 - 加载实际图片
-                CandidateModelImageView(modelId: match.model.id)
-                    .frame(width: 60, height: 60)
-                    .cornerRadius(8)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(match.model.name)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    
-                    if let nameEn = match.model.nameEn, !nameEn.isEmpty && nameEn != match.model.name {
-                        Text(nameEn)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                    }
-                    
-                    HStack {
-                        Text("\(Int(match.similarity * 100))% 匹配")
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                            .fontWeight(.bold)
-                        
-                        Spacer()
-                        
-                        Text(match.model.rarityLevel)
-                            .font(.caption)
-                            .foregroundColor(rarityColor(match.model.rarityLevel))
-                            .fontWeight(.medium)
-                    }
-                }
-                
-                Spacer()
-                
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding()
-            .background(Color(.systemBackground))
-            .cornerRadius(12)
-            .shadow(radius: 1)
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-}
-
-// MARK: - 候选模型图片视图
-struct CandidateModelImageView: View {
-    let modelId: String
-    @State private var imageUrl: String?
-    @State private var isLoading = true
-    
-    var body: some View {
-        Group {
-            if let imageUrl = imageUrl {
-                CachedAsyncImage(url: URL(string: imageUrl)) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(.systemGray6))
-                        .overlay(
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        )
-                }
-                .clipped()
-            } else {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(.systemGray6))
-                    .overlay(
-                        VStack(spacing: 2) {
-                            if isLoading {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                            } else {
-                                Image(systemName: "photo")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.secondary)
-                                Text("暂无图片")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    )
-            }
-        }
-        .onAppear {
-            loadModelImage()
-        }
-    }
-    
-    private func loadModelImage() {
-        // 先检查URL缓存
-        if let cachedUrl = ImageCacheManager.shared.getCachedImageUrl(for: modelId) {
-            self.imageUrl = cachedUrl
-            self.isLoading = false
-            return
-        }
-        
-        // 从数据库加载
-        Task {
-            do {
-                let images = try await LabubuSupabaseDatabaseService.shared.fetchModelImages(modelId: modelId)
-                await MainActor.run {
-                    if let firstImage = images.first {
-                        self.imageUrl = firstImage
-                        // 缓存URL
-                        ImageCacheManager.shared.cacheImageUrl(firstImage, for: modelId)
-                    }
-                    self.isLoading = false
-                }
-            } catch {
-                print("❌ 加载候选模型图片失败: \(error)")
-                await MainActor.run {
-                    self.isLoading = false
-                }
-            }
         }
     }
 }

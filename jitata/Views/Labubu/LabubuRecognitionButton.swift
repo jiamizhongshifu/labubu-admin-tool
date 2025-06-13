@@ -11,12 +11,32 @@ import SwiftUI
 struct LabubuRecognitionButton: View {
     let image: UIImage
     let onRecognitionComplete: (LabubuRecognitionResult) -> Void
+    let onAIRecognitionComplete: ((LabubuAIRecognitionResult) -> Void)?
+    
+    // 便利初始化方法 - 只支持旧格式回调
+    init(image: UIImage, onRecognitionComplete: @escaping (LabubuRecognitionResult) -> Void) {
+        self.image = image
+        self.onRecognitionComplete = onRecognitionComplete
+        self.onAIRecognitionComplete = nil
+    }
+    
+    // 完整初始化方法 - 支持AI识别回调
+    init(image: UIImage, 
+         onRecognitionComplete: @escaping (LabubuRecognitionResult) -> Void,
+         onAIRecognitionComplete: @escaping (LabubuAIRecognitionResult) -> Void) {
+        self.image = image
+        self.onRecognitionComplete = onRecognitionComplete
+        self.onAIRecognitionComplete = onAIRecognitionComplete
+    }
     
     @StateObject private var recognitionService = LabubuRecognitionService.shared
     @StateObject private var aiRecognitionService = LabubuAIRecognitionService.shared
     @State private var recognitionState: LabubuRecognitionState = .idle
     @State private var recognitionResult: LabubuRecognitionResult?
     @State private var errorMessage: String?
+    
+    // 动画状态
+    @State private var isAnimating = false
     
     var body: some View {
         VStack(spacing: 16) {
@@ -25,11 +45,6 @@ struct LabubuRecognitionButton: View {
                 buttonContent
             }
             .disabled(recognitionService.isRecognizing)
-            
-            // 进度条
-            if recognitionService.isRecognizing {
-                progressSection
-            }
             
             // 错误信息
             if let errorMessage = errorMessage {
@@ -45,24 +60,38 @@ struct LabubuRecognitionButton: View {
             recognitionIcon
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(buttonTitle)
-                    .font(.headline)
-                    .foregroundColor(.white)
-                
-                if recognitionService.isRecognizing {
-                    Text("正在识别中...")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.8))
+                HStack(spacing: 4) {
+                    Text(buttonTitle)
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    
+                    // 只在识别中时显示3个跳动的点
+                    if recognitionState == .recognizing {
+                        HStack(spacing: 2) {
+                            ForEach(0..<3) { index in
+                                Circle()
+                                    .fill(.white)
+                                    .frame(width: 4, height: 4)
+                                    .scaleEffect(isAnimating ? 1.2 : 0.6)
+                                    .animation(
+                                        .easeInOut(duration: 0.5)
+                                        .repeatForever()
+                                        .delay(Double(index) * 0.15),
+                                        value: isAnimating
+                                    )
+                            }
+                        }
+                        .onAppear {
+                            isAnimating = true
+                        }
+                        .onDisappear {
+                            isAnimating = false
+                        }
+                    }
                 }
             }
             
             Spacer()
-            
-            if recognitionService.isRecognizing {
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    .scaleEffect(0.8)
-            }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
@@ -70,19 +99,16 @@ struct LabubuRecognitionButton: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(buttonBackgroundColor)
         )
+        .onChange(of: recognitionState) { _, newState in
+            if newState == .recognizing {
+                isAnimating = true
+            } else {
+                isAnimating = false
+            }
+        }
     }
     
-    private var progressSection: some View {
-        VStack(spacing: 8) {
-            ProgressView(value: recognitionService.recognitionProgress)
-                .progressViewStyle(LinearProgressViewStyle(tint: .blue))
-            
-            Text("\(Int(recognitionService.recognitionProgress * 100))%")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .padding(.horizontal)
-    }
+    // MARK: - 动画组件（已简化）
     
     private func errorSection(_ message: String) -> some View {
         Text(message)
@@ -102,7 +128,7 @@ struct LabubuRecognitionButton: View {
         case .idle:
             return "识别Labubu"
         case .recognizing:
-            return "识别中..."
+            return "识别中"
         case .completed:
             return "重新识别"
         case .failed:
@@ -136,6 +162,20 @@ struct LabubuRecognitionButton: View {
         }
     }
     
+    // MARK: - 动画控制（已简化）
+    
+    private func startAnimations() {
+        withAnimation {
+            isAnimating = true
+        }
+    }
+    
+    private func stopAnimations() {
+        withAnimation {
+            isAnimating = false
+        }
+    }
+    
     // MARK: - 识别逻辑
     
     private func startRecognition() {
@@ -154,12 +194,17 @@ struct LabubuRecognitionButton: View {
             print("🤖 尝试AI识别...")
             let aiResult = try await aiRecognitionService.recognizeUserPhoto(image)
             
-            // 转换AI识别结果为标准格式
-            let result = convertAIResultToStandardResult(aiResult, originalImage: image)
-            
-            recognitionResult = result
-            recognitionState = .completed
-            onRecognitionComplete(result)
+            // 如果有AI识别回调，直接使用AI结果
+            if let aiCallback = onAIRecognitionComplete {
+                recognitionState = .completed
+                aiCallback(aiResult)
+            } else {
+                // 否则转换为标准格式
+                let result = convertAIResultToStandardResult(aiResult, originalImage: image)
+                recognitionResult = result
+                recognitionState = .completed
+                onRecognitionComplete(result)
+            }
             
         } catch {
             print("⚠️ AI识别失败，降级到简单识别: \(error)")
@@ -168,11 +213,17 @@ struct LabubuRecognitionButton: View {
             do {
                 let result = try await recognitionService.recognizeLabubu(image)
                 
+                // 停止动画
+                isAnimating = false
+                
                 recognitionResult = result
                 recognitionState = .completed
                 onRecognitionComplete(result)
                 
             } catch let fallbackError {
+                // 停止动画
+                isAnimating = false
+                
                 recognitionState = .failed
                 errorMessage = "识别失败: \(fallbackError.localizedDescription)"
                 
@@ -185,12 +236,14 @@ struct LabubuRecognitionButton: View {
         }
     }
     
+
+    
     /// 转换AI识别结果为标准识别结果格式
     private func convertAIResultToStandardResult(_ aiResult: LabubuAIRecognitionResult, originalImage: UIImage) -> LabubuRecognitionResult {
         // 转换匹配结果
         let bestMatch: LabubuMatch? = aiResult.matchResults.first.map { dbMatch in
             LabubuMatch(
-                model: dbMatch.model,
+                model: dbMatch.model.toLabubuModel(),
                 series: nil, // AI结果中没有series信息，可以后续查询
                 confidence: dbMatch.similarity,
                 matchedFeatures: dbMatch.matchedFeatures
@@ -198,7 +251,7 @@ struct LabubuRecognitionButton: View {
         }
         
         // 转换备选项
-        let alternatives = aiResult.matchResults.dropFirst().map { $0.model }
+        let alternatives = aiResult.matchResults.dropFirst().map { $0.model.toLabubuModel() }
         
         // 创建默认特征
         let features = VisualFeatures(

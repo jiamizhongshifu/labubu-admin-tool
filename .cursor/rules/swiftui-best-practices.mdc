@@ -1,0 +1,222 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# SwiftUI Best Practices for Jitata
+
+## State Management
+
+### Use Appropriate State Wrappers
+- `@State` for local view state
+- `@StateObject` for view-owned ObservableObject instances
+- `@ObservedObject` for passed-in ObservableObject instances
+- `@EnvironmentObject` for app-wide shared state
+
+### Example from Recognition Views
+```swift
+@State private var selectedMatchIndex = 0
+@State private var isLoadingDetails = false
+@State private var referenceImages: [String] = []
+@StateObject private var databaseManager = LabubuDatabaseManager.shared
+```
+
+## Animation Patterns
+
+### Recognition Button Animation
+Follow the pattern in [LabubuRecognitionButton.swift](mdc:jitata/Views/Labubu/LabubuRecognitionButton.swift):
+
+```swift
+// State-driven animation
+@State private var isAnimating = false
+
+// Optimized animation parameters
+.scaleEffect(isAnimating ? 1.2 : 0.6)
+.animation(
+    .easeInOut(duration: 0.5)
+    .repeatForever()
+    .delay(Double(index) * 0.15),
+    value: isAnimating
+)
+
+// State change handling
+.onChange(of: recognitionState) { _, newState in
+    isAnimating = (newState == .recognizing)
+}
+```
+
+## Async Operations
+
+### Always Use MainActor for UI Updates
+```swift
+Task {
+    let result = try await someAsyncOperation()
+    await MainActor.run {
+        self.uiState = result
+    }
+}
+```
+
+### Error Handling Pattern
+```swift
+do {
+    let result = try await operation()
+    // Handle success
+} catch {
+    await MainActor.run {
+        self.errorMessage = error.localizedDescription
+    }
+}
+```
+
+## Image Loading
+
+### Use CachedAsyncImage
+Always prefer [CachedAsyncImage](mdc:jitata/Services/ImageCacheManager.swift) over AsyncImage:
+
+```swift
+CachedAsyncImage(url: URL(string: imageUrl)) { image in
+    image
+        .resizable()
+        .aspectRatio(contentMode: .fill)
+} placeholder: {
+    RoundedRectangle(cornerRadius: 8)
+        .fill(Color(.systemGray6))
+        .overlay(ProgressView())
+}
+.clipped()
+```
+
+## Navigation and Sheets
+
+### Sheet Presentation
+Use boolean state for sheet presentation:
+```swift
+@State private var showingCorrection = false
+
+.sheet(isPresented: $showingCorrection) {
+    correctionView
+}
+```
+
+### Navigation Structure
+Follow the pattern in [LabubuAIRecognitionResultView.swift](mdc:jitata/Views/Labubu/LabubuAIRecognitionResultView.swift):
+- Use NavigationView for modal presentations
+- Set appropriate navigation titles and display modes
+- Include toolbar items for actions
+
+## Performance Optimization
+
+### LazyVStack for Large Lists
+```swift
+ScrollView {
+    LazyVStack(spacing: 8) {
+        ForEach(items, id: \.id) { item in
+            ItemView(item: item)
+        }
+    }
+}
+```
+
+### Conditional View Loading
+```swift
+if !items.isEmpty {
+    ItemListView(items: items)
+} else {
+    EmptyStateView()
+}
+```
+
+## Error States and Loading
+
+### Consistent Loading States
+```swift
+if isLoading {
+    ProgressView()
+        .scaleEffect(0.8)
+} else if let error = errorMessage {
+    ErrorView(message: error)
+} else {
+    ContentView()
+}
+```
+
+### User-Friendly Error Messages
+Provide specific, actionable error messages:
+```swift
+switch error {
+case .networkError:
+    Text("网络连接失败，请检查网络设置")
+case .apiError:
+    Text("服务暂时不可用，请稍后重试")
+default:
+    Text("发生未知错误，请重试")
+}
+```
+
+## Accessibility
+
+### Semantic Labels
+```swift
+Image(systemName: "photo")
+    .accessibilityLabel("模型图片")
+
+Button("重新识别") { }
+    .accessibilityHint("重新分析当前图片")
+```
+
+## Code Organization
+
+### View Decomposition
+Break large views into smaller, focused components:
+```swift
+// MARK: - Main View
+var body: some View {
+    VStack {
+        headerSection
+        contentSection
+        footerSection
+    }
+}
+
+// MARK: - Header Section
+private var headerSection: some View {
+    // Header implementation
+}
+```
+
+### Extension Organization
+Use extensions for view modifiers and helper methods:
+```swift
+extension LabubuAIRecognitionResultView {
+    private func formatDate(_ date: Date) -> String {
+        // Date formatting logic
+    }
+    
+    private func rarityColor(_ rarity: String) -> Color {
+        // Color logic
+    }
+}
+```
+
+## Modern SwiftUI APIs
+
+### Use New onChange Syntax
+```swift
+// Preferred (iOS 17+)
+.onChange(of: value) { oldValue, newValue in
+    // Handle change
+}
+
+// Fallback for older iOS versions
+.onChange(of: value) { newValue in
+    // Handle change
+}
+```
+
+### Task Modifier for Async Operations
+```swift
+.task {
+    await loadData()
+}
+```

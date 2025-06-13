@@ -1,0 +1,70 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# AI Recognition Patterns & Best Practices
+
+## Core AI Recognition Service
+The main AI recognition logic is in [LabubuAIRecognitionService.swift](mdc:jitata/Services/LabubuAIRecognitionService.swift).
+
+## JSON Parsing Strategy
+**CRITICAL**: Always use the fault-tolerant JSON parsing approach implemented in the service:
+
+### 4-Layer Parsing Fallback
+1. **Method 1**: Extract ````json` code blocks
+2. **Method 2**: Extract regular code blocks  
+3. **Method 3**: Find `{...}` JSON objects using regex
+4. **Method 4**: Use raw content as fallback
+
+### Smart Quote Handling
+Always clean Unicode smart quotes before JSON parsing:
+```swift
+cleaned = cleaned.replacingOccurrences(of: "\u{201C}", with: "\"") // Left double quote
+cleaned = cleaned.replacingOccurrences(of: "\u{201D}", with: "\"") // Right double quote
+cleaned = cleaned.replacingOccurrences(of: "\u{2018}", with: "'")  // Left single quote
+cleaned = cleaned.replacingOccurrences(of: "\u{2019}", with: "'")  // Right single quote
+```
+
+### Type-Tolerant Parsing
+Handle confidence field as both string and number:
+```swift
+if let confidenceString = jsonObject["confidence"] as? String,
+   let confidenceDouble = Double(confidenceString) {
+    confidence = confidenceDouble
+} else if let confidenceDouble = jsonObject["confidence"] as? Double {
+    confidence = confidenceDouble
+}
+```
+
+## Network Configuration
+- **Timeout**: 180 seconds (3 minutes) for AI requests
+- **Image Quality**: Max size 1024px, compression 0.8
+- **Retry Logic**: Single attempt with comprehensive error handling
+
+## Error Classification
+Use specific error types based on HTTP status codes:
+- `401`: API configuration missing
+- `429`: Rate limited
+- `402/403`: Insufficient credits
+- `408/504`: Timeout errors
+- `500+`: Server errors
+
+## Similarity Matching
+- **Threshold**: 0.08 (lowered from 0.15 for better recall)
+- **Multi-dimensional scoring**: Text similarity + feature matching + series matching + color matching
+- **Weighted combination**: Different weights for different similarity aspects
+
+## AI Prompt Engineering
+Include comprehensive Labubu knowledge in prompts:
+- Brand characteristics and history
+- Common series and variations
+- Explicit JSON format requirements with ```json``` wrappers
+- Detailed feature description requirements
+
+## Recognition Button Animation
+Use the optimized animation in [LabubuRecognitionButton.swift](mdc:jitata/Views/Labubu/LabubuRecognitionButton.swift):
+- 3 dots with staggered animation
+- Scale range: 1.2 to 0.6
+- Duration: 0.5s with 0.15s delays
+- State-driven animation control

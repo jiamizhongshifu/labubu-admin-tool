@@ -1,0 +1,203 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Database Integration Patterns
+
+## Core Database Services
+
+### Supabase Integration
+Primary cloud database service: [LabubuSupabaseDatabaseService.swift](mdc:jitata/Services/LabubuSupabaseDatabaseService.swift)
+
+### Local Database Management
+Local data coordination: [LabubuDatabaseManager.swift](mdc:jitata/Services/LabubuDatabaseManager.swift)
+
+## Data Models
+All database models are defined in [LabubuDatabaseModels.swift](mdc:jitata/Models/LabubuDatabaseModels.swift):
+
+### Core Models
+- `LabubuSeries`: Series information with metadata
+- `LabubuModel`: Individual model details with features
+- `LabubuImage`: Image references and metadata
+- `LabubuPrice`: Pricing information with market data
+
+### Model Relationships
+```swift
+// Series → Models (one-to-many)
+LabubuSeries.id → LabubuModel.series_id
+
+// Models → Images (one-to-many)
+LabubuModel.id → LabubuImage.model_id
+
+// Models → Prices (one-to-many)
+LabubuModel.id → LabubuPrice.model_id
+```
+
+## Database Query Patterns
+
+### Async/Await Pattern
+Always use async/await for database operations:
+
+```swift
+func fetchModelDetails(modelId: String) async throws -> LabubuModel? {
+    // Database query implementation
+}
+```
+
+### Error Handling
+Implement comprehensive error handling:
+
+```swift
+do {
+    let models = try await databaseService.fetchModels()
+    return models
+} catch {
+    print("❌ [数据库] 查询失败: \(error)")
+    throw DatabaseError.queryFailed(error)
+}
+```
+
+### Caching Integration
+Always integrate with image caching when fetching image URLs:
+
+```swift
+func fetchModelImages(for modelId: String) async throws -> [String] {
+    // Check URL cache first
+    if let cachedUrl = ImageCacheManager.shared.getCachedImageUrl(for: modelId) {
+        return [cachedUrl]
+    }
+    
+    // Fetch from database
+    let images = try await supabaseService.fetchModelImages(modelId: modelId)
+    
+    // Cache the result
+    if let firstImage = images.first {
+        ImageCacheManager.shared.cacheImageUrl(firstImage, for: modelId)
+    }
+    
+    return images
+}
+```
+
+## Configuration Management
+
+### Environment Variables
+Database configuration in [APIConfig.swift](mdc:jitata/Config/APIConfig.swift):
+
+```swift
+static let supabaseURL = ProcessInfo.processInfo.environment["SUPABASE_URL"] ?? ""
+static let supabaseAnonKey = ProcessInfo.processInfo.environment["SUPABASE_ANON_KEY"] ?? ""
+```
+
+### Connection Validation
+Always validate database connections:
+
+```swift
+func validateConnection() async -> Bool {
+    do {
+        let _ = try await supabase.from("labubu_series").select("id").limit(1).execute()
+        return true
+    } catch {
+        print("❌ [数据库] 连接验证失败: \(error)")
+        return false
+    }
+}
+```
+
+## Query Optimization
+
+### Selective Field Loading
+Only fetch required fields to optimize performance:
+
+```swift
+// Good: Selective fields
+.select("id, name, series_name, rarity, estimated_price")
+
+// Avoid: Select all fields unless necessary
+.select("*")
+```
+
+### Pagination for Large Datasets
+Implement pagination for large result sets:
+
+```swift
+func fetchModels(page: Int, pageSize: Int = 20) async throws -> [LabubuModel] {
+    let from = page * pageSize
+    let to = from + pageSize - 1
+    
+    return try await supabase
+        .from("labubu_models")
+        .select("*")
+        .range(from: from, to: to)
+        .execute()
+        .value
+}
+```
+
+## Data Synchronization
+
+### Local-Cloud Sync Pattern
+```swift
+func syncData() async {
+    do {
+        // Fetch latest from cloud
+        let cloudData = try await fetchFromCloud()
+        
+        // Update local cache
+        await updateLocalCache(with: cloudData)
+        
+        // Notify UI of updates
+        await MainActor.run {
+            self.dataUpdated = true
+        }
+    } catch {
+        // Handle sync errors gracefully
+        print("⚠️ [同步] 数据同步失败: \(error)")
+    }
+}
+```
+
+## Security Considerations
+
+### Row Level Security (RLS)
+Ensure RLS policies are properly configured in Supabase:
+- Reference: [supabase-rls-policies.sql](mdc:supabase-rls-policies.sql)
+
+### API Key Management
+- Never hardcode API keys in source code
+- Use environment variables for all sensitive configuration
+- Implement proper key rotation strategies
+
+## Testing Database Operations
+
+### Connection Testing
+Use the test script: [test-supabase-connection.sh](mdc:test-supabase-connection.sh)
+
+### Mock Data for Development
+Create mock data services for testing:
+
+```swift
+#if DEBUG
+class MockDatabaseService: DatabaseServiceProtocol {
+    func fetchModels() async throws -> [LabubuModel] {
+        // Return mock data for testing
+    }
+}
+#endif
+```
+
+## Performance Monitoring
+
+### Query Performance Logging
+```swift
+let startTime = Date()
+let result = try await performQuery()
+let duration = Date().timeIntervalSince(startTime)
+print("📊 [性能] 查询耗时: \(String(format: "%.2f", duration))秒")
+```
+
+### Connection Pool Management
+- Use singleton pattern for database services
+- Implement connection reuse strategies
+- Monitor connection health and implement reconnection logic

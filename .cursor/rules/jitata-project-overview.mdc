@@ -1,0 +1,59 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Jitata iOS App - Project Overview
+
+## Project Description
+Jitata is an iOS application for Labubu toy recognition using AI. The app allows users to photograph Labubu toys and get detailed information about the specific model, series, rarity, and estimated value.
+
+## Core Architecture
+
+### Main Entry Point
+- [jitataApp.swift](mdc:jitata/jitataApp.swift) - SwiftUI app entry point
+- [ContentView.swift](mdc:jitata/ContentView.swift) - Main content view
+- [HomeView.swift](mdc:jitata/Views/HomeView.swift) - Primary home interface
+
+### Key Services
+- [LabubuAIRecognitionService.swift](mdc:jitata/Services/LabubuAIRecognitionService.swift) - AI-powered recognition with fault-tolerant JSON parsing
+- [ImageCacheManager.swift](mdc:jitata/Services/ImageCacheManager.swift) - Dual-layer image caching system (memory + disk)
+- [LabubuSupabaseDatabaseService.swift](mdc:jitata/Services/LabubuSupabaseDatabaseService.swift) - Cloud database integration
+- [DataManager.swift](mdc:jitata/Services/DataManager.swift) - Local data management
+
+### Recognition Flow
+1. User captures photo via [CameraView.swift](mdc:jitata/Views/Camera/CameraView.swift)
+2. [LabubuRecognitionButton.swift](mdc:jitata/Views/Labubu/LabubuRecognitionButton.swift) triggers AI analysis
+3. [LabubuAIRecognitionService.swift](mdc:jitata/Services/LabubuAIRecognitionService.swift) processes image with multiple JSON parsing fallbacks
+4. Results displayed in [LabubuAIRecognitionResultView.swift](mdc:jitata/Views/Labubu/LabubuAIRecognitionResultView.swift) with cached images
+
+### Data Models
+- [LabubuDatabaseModels.swift](mdc:jitata/Models/LabubuDatabaseModels.swift) - Core database models
+- [LabubuModels.swift](mdc:jitata/Models/LabubuModels.swift) - Recognition and AI models
+
+## Recent Major Improvements
+
+### AI Recognition Reliability (2025-01-27)
+- Implemented 4-layer JSON parsing fallback system
+- Added smart quote Unicode handling
+- Extended network timeout from 2min to 3min
+- Improved image quality parameters
+- Lowered similarity threshold for better matches
+
+### Image Caching System (2025-01-27)
+- Dual-layer caching: memory (50MB) + disk (200MB)
+- URL caching for model ID → image URL mapping
+- 7-day automatic expiration
+- Thread-safe concurrent access
+- Custom [CachedAsyncImage](mdc:jitata/Services/ImageCacheManager.swift) component
+
+## Configuration
+- [APIConfig.swift](mdc:jitata/Config/APIConfig.swift) - API endpoints and keys
+- Environment variables loaded from `.env` file
+- Supabase integration for cloud data
+
+## Documentation
+- [AI_RECOGNITION_FAILURE_FIX_SUMMARY.md](mdc:docs/AI_RECOGNITION_FAILURE_FIX_SUMMARY.md) - Detailed AI fixes
+- [IMAGE_CACHE_IMPLEMENTATION.md](mdc:docs/IMAGE_CACHE_IMPLEMENTATION.md) - Caching strategy
+- [UI_FIXES_SUMMARY.md](mdc:docs/UI_FIXES_SUMMARY.md) - UI improvements
+- [code-review.md](mdc:docs/code-review.md) - Issue tracking

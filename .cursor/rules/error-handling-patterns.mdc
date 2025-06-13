@@ -1,0 +1,272 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Error Handling Patterns
+
+## Core Error Types
+
+### AI Recognition Errors
+Defined in [LabubuAIRecognitionService.swift](mdc:jitata/Services/LabubuAIRecognitionService.swift):
+
+```swift
+enum AIRecognitionError: LocalizedError {
+    case apiConfigurationMissing
+    case rateLimited
+    case insufficientCredits
+    case timeout
+    case serverError(Int)
+    case networkError(Error)
+    case invalidResponse
+    case jsonParsingFailed(String)
+    
+    var errorDescription: String? {
+        switch self {
+        case .apiConfigurationMissing:
+            return "API配置缺失，请检查环境变量设置"
+        case .rateLimited:
+            return "请求过于频繁，请稍后重试"
+        case .insufficientCredits:
+            return "API额度不足，请联系管理员"
+        case .timeout:
+            return "请求超时，请检查网络连接"
+        case .serverError(let code):
+            return "服务器错误 (\(code))，请稍后重试"
+        case .networkError:
+            return "网络连接失败，请检查网络设置"
+        case .invalidResponse:
+            return "服务器响应格式错误"
+        case .jsonParsingFailed(let details):
+            return "数据解析失败: \(details)"
+        }
+    }
+}
+```
+
+## Error Classification Strategy
+
+### HTTP Status Code Mapping
+```swift
+func classifyError(statusCode: Int) -> AIRecognitionError {
+    switch statusCode {
+    case 401:
+        return .apiConfigurationMissing
+    case 429:
+        return .rateLimited
+    case 402, 403:
+        return .insufficientCredits
+    case 408, 504:
+        return .timeout
+    case 500...599:
+        return .serverError(statusCode)
+    default:
+        return .invalidResponse
+    }
+}
+```
+
+### Network Error Handling
+```swift
+func handleNetworkError(_ error: Error) -> AIRecognitionError {
+    if let urlError = error as? URLError {
+        switch urlError.code {
+        case .timedOut:
+            return .timeout
+        case .notConnectedToInternet, .networkConnectionLost:
+            return .networkError(error)
+        default:
+            return .networkError(error)
+        }
+    }
+    return .networkError(error)
+}
+```
+
+## JSON Parsing Error Recovery
+
+### Multi-Layer Parsing Strategy
+Implement progressive fallback parsing as shown in the AI service:
+
+```swift
+func parseAIResponse(_ content: String) throws -> AIRecognitionResult {
+    var lastError: Error?
+    
+    // Method 1: Extract ```json code blocks
+    if let result = try? parseJSONCodeBlock(content) {
+        return result
+    }
+    
+    // Method 2: Extract regular code blocks
+    if let result = try? parseCodeBlock(content) {
+        return result
+    }
+    
+    // Method 3: Find JSON objects with regex
+    if let result = try? parseJSONWithRegex(content) {
+        return result
+    }
+    
+    // Method 4: Use raw content as fallback
+    if let result = try? parseRawJSON(content) {
+        return result
+    }
+    
+    throw AIRecognitionError.jsonParsingFailed("所有解析方法都失败")
+}
+```
+
+### Unicode Character Cleaning
+Always clean problematic Unicode characters before JSON parsing:
+
+```swift
+func cleanJSONString(_ input: String) -> String {
+    return input
+        .replacingOccurrences(of: "\u{201C}", with: "\"") // Left double quote
+        .replacingOccurrences(of: "\u{201D}", with: "\"") // Right double quote
+        .replacingOccurrences(of: "\u{2018}", with: "'")  // Left single quote
+        .replacingOccurrences(of: "\u{2019}", with: "'")  // Right single quote
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+}
+```
+
+## UI Error Presentation
+
+### User-Friendly Error Messages
+Convert technical errors to user-friendly messages:
+
+```swift
+func userFriendlyErrorMessage(for error: Error) -> String {
+    if let aiError = error as? AIRecognitionError {
+        return aiError.localizedDescription
+    }
+    
+    switch error {
+    case is URLError:
+        return "网络连接失败，请检查网络设置"
+    case is DecodingError:
+        return "数据格式错误，请重试"
+    default:
+        return "发生未知错误，请重试"
+    }
+}
+```
+
+### Error State Management in Views
+```swift
+@State private var errorMessage: String?
+@State private var showingError = false
+
+// Error handling in async operations
+Task {
+    do {
+        let result = try await performOperation()
+        // Handle success
+    } catch {
+        await MainActor.run {
+            self.errorMessage = userFriendlyErrorMessage(for: error)
+            self.showingError = true
+        }
+    }
+}
+
+// Error presentation
+.alert("错误", isPresented: $showingError) {
+    Button("确定") { }
+} message: {
+    Text(errorMessage ?? "未知错误")
+}
+```
+
+## Logging and Debugging
+
+### Structured Logging Pattern
+```swift
+func logError(_ error: Error, context: String, additionalInfo: [String: Any] = [:]) {
+    print("❌ [\(context)] 错误: \(error.localizedDescription)")
+    
+    if !additionalInfo.isEmpty {
+        print("📋 [\(context)] 附加信息: \(additionalInfo)")
+    }
+    
+    #if DEBUG
+    print("🔍 [\(context)] 详细错误: \(error)")
+    #endif
+}
+```
+
+### Performance Impact Logging
+```swift
+func logPerformanceImpact(operation: String, duration: TimeInterval, success: Bool) {
+    let status = success ? "✅" : "❌"
+    print("\(status) [\(operation)] 耗时: \(String(format: "%.2f", duration))秒")
+}
+```
+
+## Retry Strategies
+
+### Exponential Backoff for Network Requests
+```swift
+func performWithRetry<T>(
+    maxAttempts: Int = 3,
+    baseDelay: TimeInterval = 1.0,
+    operation: @escaping () async throws -> T
+) async throws -> T {
+    var lastError: Error?
+    
+    for attempt in 1...maxAttempts {
+        do {
+            return try await operation()
+        } catch {
+            lastError = error
+            
+            if attempt < maxAttempts {
+                let delay = baseDelay * pow(2.0, Double(attempt - 1))
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+        }
+    }
+    
+    throw lastError ?? NSError(domain: "RetryError", code: -1)
+}
+```
+
+## Error Recovery Patterns
+
+### Graceful Degradation
+```swift
+func loadModelImages(modelId: String) async -> [String] {
+    do {
+        // Try primary data source
+        return try await primaryImageService.fetchImages(modelId: modelId)
+    } catch {
+        print("⚠️ [图片加载] 主要数据源失败，尝试备用方案")
+        
+        do {
+            // Try fallback data source
+            return try await fallbackImageService.fetchImages(modelId: modelId)
+        } catch {
+            print("❌ [图片加载] 所有数据源都失败，返回默认图片")
+            return ["default_placeholder_url"]
+        }
+    }
+}
+```
+
+### Cache-First Error Recovery
+```swift
+func loadWithCacheRecovery<T>(
+    cacheKey: String,
+    networkOperation: () async throws -> T,
+    cacheOperation: () -> T?
+) async -> T? {
+    do {
+        let result = try await networkOperation()
+        // Cache successful result
+        return result
+    } catch {
+        print("⚠️ [缓存恢复] 网络请求失败，尝试使用缓存")
+        return cacheOperation()
+    }
+}
+```

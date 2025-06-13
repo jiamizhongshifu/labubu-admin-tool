@@ -1,0 +1,121 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Image Caching Implementation Guidelines
+
+## Core Caching Service
+All image caching is handled by [ImageCacheManager.swift](mdc:jitata/Services/ImageCacheManager.swift) - a singleton service with dual-layer caching.
+
+## Caching Architecture
+
+### Three-Level Caching Strategy
+1. **Memory Cache**: NSCache with 50MB limit, 100 image count limit
+2. **Disk Cache**: 200MB limit, 7-day expiration, JPEG format (0.8 quality)
+3. **URL Cache**: Model ID → Image URL mapping for database query optimization
+
+### Cache Configuration
+```swift
+// Memory limits
+memoryCache.totalCostLimit = 50 * 1024 * 1024 // 50MB
+memoryCache.countLimit = 100 // Max 100 images
+
+// Disk cache
+maxDiskCacheSize = 200 * 1024 * 1024 // 200MB
+cacheExpiration = 7 * 24 * 60 * 60 // 7 days
+
+// Cache directory: ~/Library/Caches/LabubuImageCache/
+```
+
+## Usage Patterns
+
+### Always Use CachedAsyncImage
+Replace all `AsyncImage` instances with `CachedAsyncImage` from [ImageCacheManager.swift](mdc:jitata/Services/ImageCacheManager.swift):
+
+```swift
+CachedAsyncImage(url: URL(string: imageUrl)) { image in
+    image
+        .resizable()
+        .aspectRatio(contentMode: .fill)
+} placeholder: {
+    ProgressView()
+}
+```
+
+### URL Caching for Database Optimization
+Always cache model ID → URL mappings to avoid repeated database queries:
+
+```swift
+// Cache URL when loading from database
+if let firstImage = images.first {
+    ImageCacheManager.shared.cacheImageUrl(firstImage, for: modelId)
+}
+
+// Check URL cache before database query
+if let cachedUrl = ImageCacheManager.shared.getCachedImageUrl(for: modelId) {
+    // Use cached URL directly
+    return [cachedUrl]
+}
+```
+
+## Implementation in Views
+
+### Recognition Result Views
+In [LabubuAIRecognitionResultView.swift](mdc:jitata/Views/Labubu/LabubuAIRecognitionResultView.swift):
+- All model images use `CachedAsyncImage`
+- `loadModelDetails()` checks URL cache first
+- `CandidateModelImageView` implements caching logic
+
+### Loading States
+Always provide appropriate loading and error states:
+```swift
+if isLoading {
+    ProgressView().scaleEffect(0.8)
+} else {
+    Image(systemName: "photo")
+    Text("暂无图片")
+}
+```
+
+## Cache Management
+
+### Automatic Cleanup
+- Startup cleanup removes expired files (7+ days old)
+- Background queue execution doesn't block UI
+- Memory cache automatically manages based on system pressure
+
+### Manual Management
+```swift
+// Clear all caches
+ImageCacheManager.shared.clearAllCache()
+
+// Get cache statistics
+let (count, size) = ImageCacheManager.shared.getCacheStats()
+```
+
+## Thread Safety
+- URL cache uses concurrent queue with barrier writes
+- Memory and disk operations are thread-safe
+- All UI updates happen on MainActor
+
+## Performance Optimization
+- **Memory hits**: Instant loading
+- **Disk hits**: 5-10x faster than network
+- **URL cache**: Eliminates database round-trips
+- **Compression**: 0.8 JPEG quality balances size vs quality
+
+## Error Handling
+Always handle caching errors gracefully:
+- Network failures fall back to cached versions
+- Disk errors don't crash the app
+- Missing cache entries trigger fresh downloads
+
+## Logging
+Use consistent logging format for debugging:
+```swift
+print("🖼️ [图片缓存] 内存命中: \(key)")
+print("🖼️ [图片缓存] 磁盘命中: \(key)")
+print("🖼️ [图片缓存] 缓存未命中: \(key)")
+print("❌ [缓存图片] 加载失败: \(error)")
+```
