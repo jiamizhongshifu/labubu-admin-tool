@@ -457,13 +457,17 @@ extension ToySticker {
         }
         
         // 构建价格显示字符串
-        if let releasePrice = bestMatch.releasePrice,
-           let referencePrice = bestMatch.referencePrice {
-            return "发售价: ¥\(Int(releasePrice)) | 参考价: ¥\(Int(referencePrice))"
-        } else if let releasePrice = bestMatch.releasePrice {
-            return "发售价: ¥\(Int(releasePrice))"
-        } else if let referencePrice = bestMatch.referencePrice {
-            return "参考价: ¥\(Int(referencePrice))"
+        if let minPrice = bestMatch.estimatedPriceMin,
+           let maxPrice = bestMatch.estimatedPriceMax {
+            if minPrice == maxPrice {
+                return "参考价格: ¥\(Int(minPrice))"
+            } else {
+                return "参考价格: ¥\(Int(minPrice))-\(Int(maxPrice))"
+            }
+        } else if let minPrice = bestMatch.estimatedPriceMin {
+            return "参考价格: ¥\(Int(minPrice))+"
+        } else if let maxPrice = bestMatch.estimatedPriceMax {
+            return "参考价格: ≤¥\(Int(maxPrice))"
         }
         
         return nil

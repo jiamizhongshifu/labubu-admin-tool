@@ -913,15 +913,9 @@
                                     {{ model.rarity_level }}
                                 </span>
                             </p>
-                                                <p class="price-range" v-if="model.release_price && model.reference_price">
-                        发售价: ¥{{ model.release_price }} | 参考价: ¥{{ model.reference_price }}
-                    </p>
-                    <p class="price-range" v-else-if="model.release_price">
-                        发售价: ¥{{ model.release_price }}
-                    </p>
-                    <p class="price-range" v-else-if="model.reference_price">
-                        参考价: ¥{{ model.reference_price }}
-                    </p>
+                            <p class="price-range" v-if="model.estimated_price_min && model.estimated_price_max">
+                                ¥{{ model.estimated_price_min }} - ¥{{ model.estimated_price_max }}
+                            </p>
                             <p class="price-range" v-else style="color: #a0aec0;">
                                 价格待定
                             </p>
@@ -1129,12 +1123,12 @@
                     
                     <div class="form-row">
                         <div class="form-group">
-                            <label>发售价格 (CNY)</label>
-                            <input v-model="modelForm.release_price" type="number" min="0" step="0.01" placeholder="89.00">
+                            <label>估价最低 (CNY)</label>
+                            <input v-model="modelForm.estimated_price_min" type="number" min="0" step="0.01" placeholder="89.00">
                         </div>
                         <div class="form-group">
-                            <label>参考价格 (CNY)</label>
-                            <input v-model="modelForm.reference_price" type="number" min="0" step="0.01" placeholder="150.00">
+                            <label>估价最高 (CNY)</label>
+                            <input v-model="modelForm.estimated_price_max" type="number" min="0" step="0.01" placeholder="150.00">
                         </div>
                     </div>
                 </div>

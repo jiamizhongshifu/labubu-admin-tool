@@ -189,33 +189,22 @@ struct LabubuAIRecognitionResultView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
-                        if let releasePrice = selectedMatch.model.releasePrice, let referencePrice = selectedMatch.model.referencePrice, releasePrice > 0 && referencePrice > 0 {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("发售价: ¥\(Int(releasePrice))")
-                                    .font(.title3)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.primary)
-                                
-                                Text("参考价: ¥\(Int(referencePrice))")
-                                    .font(.title3)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.secondary)
+                        if let priceMin = selectedMatch.model.estimatedPriceMin, let priceMax = selectedMatch.model.estimatedPriceMax, priceMin > 0 && priceMax > 0 {
+                            if priceMin == priceMax {
+                                Text("¥\(Int(priceMin))")
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.green)
+                            } else {
+                                Text("¥\(Int(priceMin))-\(Int(priceMax))")
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.green)
                             }
-                        } else if let releasePrice = selectedMatch.model.releasePrice, releasePrice > 0 {
-                            Text("发售价: ¥\(Int(releasePrice))")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.green)
-                        } else if let referencePrice = selectedMatch.model.referencePrice, referencePrice > 0 {
-                            Text("参考价: ¥\(Int(referencePrice))")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.green)
                         } else {
                             Text("价格待定")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
-
                         }
                     }
                     

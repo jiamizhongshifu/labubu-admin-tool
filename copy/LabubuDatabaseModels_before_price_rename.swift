@@ -326,8 +326,8 @@ struct LabubuModelData: Codable, Identifiable {
     let modelNumber: String?
     let description: String?
     let rarityLevel: String
-    let releasePrice: Double?
-    let referencePrice: Double?
+    let estimatedPriceMin: Double?
+    let estimatedPriceMax: Double?
     let currency: String?
     let isActive: Bool
     let createdAt: String
@@ -340,8 +340,8 @@ struct LabubuModelData: Codable, Identifiable {
         case seriesId = "series_id"
         case modelNumber = "model_number"
         case rarityLevel = "rarity_level"
-        case releasePrice = "release_price"
-        case referencePrice = "reference_price"
+        case estimatedPriceMin = "estimated_price_min"
+        case estimatedPriceMax = "estimated_price_max"
         case isActive = "is_active"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
@@ -362,11 +362,11 @@ struct LabubuModelData: Codable, Identifiable {
             variant: .standard, // 默认变体
             rarity: RarityLevel(rawValue: rarityLevel) ?? .common,
             releaseDate: nil, // 数据库中没有release_date字段
-            originalPrice: releasePrice,
-            currentMarketPrice: referencePrice.map { price in
+            originalPrice: estimatedPriceMin,
+            currentMarketPrice: estimatedPriceMax.map { price in
                 MarketPrice(
                     average: price,
-                    min: releasePrice ?? price * 0.8,
+                    min: estimatedPriceMin ?? price * 0.8,
                     max: price,
                     lastUpdated: Date(),
                     source: "Supabase"

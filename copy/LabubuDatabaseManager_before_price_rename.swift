@@ -246,7 +246,7 @@ class LabubuDatabaseManager: ObservableObject {
                 variant: convertRarityToVariant(supabaseModel.rarityLevel),
                 rarity: convertStringToRarity(supabaseModel.rarityLevel),
                 releaseDate: nil, // LabubuModelData中没有releaseYear字段
-                originalPrice: supabaseModel.releasePrice,
+                originalPrice: supabaseModel.estimatedPriceMin,
                 visualFeatures: createDefaultVisualFeatures(), // 暂时使用默认值
                 tags: [], // 数据库中没有tags字段，使用空数组
                 description: supabaseModel.description
@@ -473,8 +473,8 @@ class LabubuDatabaseManager: ObservableObject {
         let seriesId: String
         let description: String
         let rarity: String
-        let releasePrice: Double
-        let referencePrice: Double
+        let estimatedPriceMin: Double
+        let estimatedPriceMax: Double
         let releaseDate: Date
         let isActive: Bool
         let visualFeatures: VisualFeaturesJSON
@@ -545,7 +545,7 @@ class LabubuDatabaseManager: ObservableObject {
             variant: convertRarityToVariant(json.rarity),
             rarity: convertStringToRarity(json.rarity),
             releaseDate: json.releaseDate,
-            originalPrice: json.releasePrice,
+            originalPrice: (json.estimatedPriceMin + json.estimatedPriceMax) / 2.0,
             visualFeatures: visualFeatures,
             tags: [json.rarity, json.visualFeatures.patternType],
             description: json.description

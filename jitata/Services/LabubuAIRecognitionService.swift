@@ -496,20 +496,31 @@ class LabubuAIRecognitionService: ObservableObject {
         // 移除多余的换行和空格
         cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // 修复常见的引号问题
+        // 修复常见的引号问题（增强版）
         cleaned = cleaned.replacingOccurrences(of: "\u{201C}", with: "\"") // 左双引号
         cleaned = cleaned.replacingOccurrences(of: "\u{201D}", with: "\"") // 右双引号
         cleaned = cleaned.replacingOccurrences(of: "\u{2018}", with: "\"") // 左单引号
         cleaned = cleaned.replacingOccurrences(of: "\u{2019}", with: "\"") // 右单引号
+        cleaned = cleaned.replacingOccurrences(of: "\u{FF02}", with: "\"") // 全角双引号
+        cleaned = cleaned.replacingOccurrences(of: "\u{FF07}", with: "\"") // 全角单引号
         
         // 修复布尔值
         cleaned = cleaned.replacingOccurrences(of: ": true", with: ": true")
         cleaned = cleaned.replacingOccurrences(of: ": false", with: ": false")
         
+        // 修复数字格式问题
+        cleaned = cleaned.replacingOccurrences(of: ": 0.", with: ": 0.")
+        cleaned = cleaned.replacingOccurrences(of: ": 1.", with: ": 1.")
+        
+        // 移除可能的BOM标记
+        if cleaned.hasPrefix("\u{FEFF}") {
+            cleaned = String(cleaned.dropFirst())
+        }
+        
         return cleaned
     }
     
-    /// 从文本中提取基本信息（备用方案）
+    /// 从文本中提取基本信息（备用方案 - 增强版）
     private func extractBasicInfoFromText(_ content: String) -> LabubuAIAnalysis {
         print("🔧 使用备用方案从文本中提取信息...")
         
@@ -528,15 +539,51 @@ class LabubuAIRecognitionService: ObservableObject {
             confidence = isLabubu ? 0.7 : 0.1
         }
         
+        // 尝试从文本中提取关键特征
+        var extractedKeyFeatures: [String] = []
+        
+        // 颜色特征
+        let colorKeywords = ["蓝色", "棕色", "白色", "灰色", "黄色", "黑色", "粉色", "绿色", "红色", "紫色", "橙色", "米色"]
+        for color in colorKeywords {
+            if lowercaseContent.contains(color) {
+                extractedKeyFeatures.append(color)
+            }
+        }
+        
+        // 材质特征
+        let materialKeywords = ["毛绒", "搪胶", "塑料", "绒毛", "plush", "vinyl"]
+        for material in materialKeywords {
+            if lowercaseContent.contains(material) {
+                extractedKeyFeatures.append(material)
+            }
+        }
+        
+        // 系列特征
+        let seriesKeywords = ["time to chill", "放松", "休闲", "fall in wild", "野外", "春天", "monsters", "怪物", "checkmate", "国际象棋"]
+        for series in seriesKeywords {
+            if lowercaseContent.contains(series) {
+                extractedKeyFeatures.append(series)
+            }
+        }
+        
+        // 形状特征
+        let shapeKeywords = ["兔耳", "大眼", "圆形", "背带裤", "头套"]
+        for shape in shapeKeywords {
+            if lowercaseContent.contains(shape) {
+                extractedKeyFeatures.append(shape)
+            }
+        }
+        
         print("🔧 备用方案结果: isLabubu=\(isLabubu), confidence=\(confidence)")
+        print("🔧 提取的关键特征: \(extractedKeyFeatures)")
         
         return LabubuAIAnalysis(
             isLabubu: isLabubu,
             confidence: confidence,
             detailedDescription: content,
             visualFeatures: nil,
-            keyFeatures: [],
-            seriesHints: "",
+            keyFeatures: extractedKeyFeatures,
+            seriesHints: extractedKeyFeatures.joined(separator: ", "),
             materialAnalysis: "",
             styleAnalysis: "",
             conditionAssessment: "",
@@ -655,6 +702,27 @@ class LabubuAIRecognitionService: ObservableObject {
         
         // 添加稀有度信息
         featureTexts.append(modelData.rarityLevel)
+        
+        // ✨ 新增：根据模型名称映射系列同义词，增强系列匹配
+        let seriesSynonymMap: [String: [String]] = [
+            "time to chill": ["time to chill", "time chill", "chill", "放松", "休闲", "时间", "time", "to"],
+            "fall in wild": ["fall in wild", "春天在野", "fall wild", "wild", "野外", "fall", "spring", "春天"],
+            "walk by fortune": ["walk by fortune", "fortune", "财富", "walk", "by"],
+            "best of luck": ["best of luck", "best luck", "好运", "luck", "best"],
+            "checkmate": ["checkmate", "chess", "棋", "国际象棋", "check", "mate"],
+            "flip with me": ["flip with me", "flip me", "翻转", "flip", "with"],
+            "dress be latte": ["dress be latte", "latte", "拿铁", "dress", "be"],
+            "jump for joy": ["jump for joy", "jump joy", "跳跃", "jump", "joy"],
+            "monsters": ["monsters", "the monsters", "monster", "怪物"]
+        ]
+        
+        let lowerName = modelData.name.lowercased()
+        for (key, synonyms) in seriesSynonymMap {
+            if lowerName.contains(key) {
+                featureTexts.append(contentsOf: synonyms)
+                print("🏷️ [系列增强] 为模型 '\(modelData.name)' 添加系列同义词: \(synonyms)")
+            }
+        }
         
         return featureTexts.joined(separator: " ")
     }
@@ -899,7 +967,7 @@ class LabubuAIRecognitionService: ObservableObject {
         return max(maxSemanticScore, partialScore)
     }
     
-    /// 计算系列名称匹配度（优化版）
+    /// 计算系列名称匹配度（优化版 - 更宽松的匹配策略）
     private func calculateSeriesMatch(userDescription: String, modelText: String) -> Double {
         let userLower = userDescription.lowercased()
         let modelLower = modelText.lowercased()
@@ -925,24 +993,52 @@ class LabubuAIRecognitionService: ObservableObject {
             for keyword in keywords {
                 let keywordLower = keyword.lowercased()
                 
-                // 完全匹配
+                // 策略1: 完全匹配（用户和模型都包含）
                 if userLower.contains(keywordLower) && modelLower.contains(keywordLower) {
                     seriesScore = max(seriesScore, 1.0)
                     continue
                 }
                 
-                // 部分匹配
-                let keywordWords = keywordLower.components(separatedBy: " ")
-                if keywordWords.count > 1 {
-                    var partialMatches = 0
-                    for word in keywordWords {
-                        if word.count > 2 && userLower.contains(word) && modelLower.contains(word) {
-                            partialMatches += 1
+                // 策略2: 单向匹配（用户包含关键词，模型包含系列中任一同义词）
+                if userLower.contains(keywordLower) {
+                    for otherKeyword in keywords {
+                        if modelLower.contains(otherKeyword.lowercased()) {
+                            seriesScore = max(seriesScore, 0.8)
+                            break
                         }
                     }
-                    if partialMatches > 0 {
-                        let partialScore = Double(partialMatches) / Double(keywordWords.count) * 0.8
+                }
+                
+                // 策略3: 反向匹配（模型包含关键词，用户包含系列中任一同义词）
+                if modelLower.contains(keywordLower) {
+                    for otherKeyword in keywords {
+                        if userLower.contains(otherKeyword.lowercased()) {
+                            seriesScore = max(seriesScore, 0.8)
+                            break
+                        }
+                    }
+                }
+                
+                // 策略4: 部分匹配（多词关键词的部分匹配）
+                let keywordWords = keywordLower.components(separatedBy: " ")
+                if keywordWords.count > 1 {
+                    var userMatches = 0
+                    var modelMatches = 0
+                    
+                    for word in keywordWords {
+                        if word.count > 2 {
+                            if userLower.contains(word) { userMatches += 1 }
+                            if modelLower.contains(word) { modelMatches += 1 }
+                        }
+                    }
+                    
+                    // 如果用户或模型有部分匹配，给予一定分数
+                    if userMatches > 0 && modelMatches > 0 {
+                        let partialScore = Double(min(userMatches, modelMatches)) / Double(keywordWords.count) * 0.6
                         seriesScore = max(seriesScore, partialScore)
+                    } else if userMatches > 0 || modelMatches > 0 {
+                        let singleSideScore = Double(max(userMatches, modelMatches)) / Double(keywordWords.count) * 0.4
+                        seriesScore = max(seriesScore, singleSideScore)
                     }
                 }
             }

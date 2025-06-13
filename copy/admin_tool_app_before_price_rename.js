@@ -63,8 +63,8 @@ createApp({
                 weight_g: 50,
                 material: 'plush',
                 feature_description: '',
-                release_price: '',
-                reference_price: '',
+                estimated_price_min: '',
+                estimated_price_max: '',
                 model_number: '',
                 tags: []
             },
@@ -653,8 +653,8 @@ createApp({
                     description: this.modelForm.description || null,
                     feature_description: this.modelForm.feature_description || null, // JSON格式特征描述
                     rarity_level: this.modelForm.rarity_level, // 使用正确的字段名
-                    release_price: this.modelForm.release_price ? parseFloat(this.modelForm.release_price) : null,
-                    reference_price: this.modelForm.reference_price ? parseFloat(this.modelForm.reference_price) : null,
+                    estimated_price_min: this.modelForm.estimated_price_min ? parseFloat(this.modelForm.estimated_price_min) : null,
+                    estimated_price_max: this.modelForm.estimated_price_max ? parseFloat(this.modelForm.estimated_price_max) : null,
                     is_active: true
                 };
                 
@@ -795,8 +795,8 @@ createApp({
                 weight_g: 50,
                 material: 'plush',
                 feature_description: '',
-                release_price: '',
-                reference_price: '',
+                estimated_price_min: '',
+                estimated_price_max: '',
                 model_number: '',
                 tags: []
             };
