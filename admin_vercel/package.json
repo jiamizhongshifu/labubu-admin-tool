@@ -1,0 +1,25 @@
+{
+  "name": "labubu-admin-tool",
+  "version": "1.0.0",
+  "description": "Labubu数据管理工具 - Vercel部署版",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'Build complete'",
+    "start": "vercel dev",
+    "test-local": "node test-local.js",
+    "deploy-check": "node scripts/deploy-check.js",
+    "generate-password": "node generate-password.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "vercel": "^32.0.0"
+  },
+  "keywords": ["labubu", "admin", "management", "vercel"],
+  "author": "Labubu Team",
+  "license": "MIT"
+} 
