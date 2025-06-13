@@ -47,4 +47,5 @@ iOSInjectionProject/
 
 # Environment variables
 .env
-admin_tool/config.js 
+admin_tool/config.js
+admin_vercel/node_modules/
