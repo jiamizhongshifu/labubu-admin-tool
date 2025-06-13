@@ -161,8 +161,22 @@
     </div>
 
     <script>
+        // 安全的localStorage访问
+        function safeLocalStorage() {
+            try {
+                return window.localStorage;
+            } catch (e) {
+                return {
+                    getItem: () => null,
+                    setItem: () => {},
+                    removeItem: () => {}
+                };
+            }
+        }
+
         // 检查是否已经登录
-        const token = localStorage.getItem('adminToken');
+        const storage = safeLocalStorage();
+        const token = storage.getItem('adminToken');
         if (token) {
             // 验证token是否有效
             fetch('/api/verify-token', {
@@ -176,11 +190,11 @@
                 if (response.ok) {
                     window.location.href = '/dashboard';
                 } else {
-                    localStorage.removeItem('adminToken');
+                    storage.removeItem('adminToken');
                 }
             })
             .catch(() => {
-                localStorage.removeItem('adminToken');
+                storage.removeItem('adminToken');
             });
         }
 
@@ -215,7 +229,7 @@
                 
                 if (response.ok) {
                     // 保存token
-                    localStorage.setItem('adminToken', data.token);
+                    storage.setItem('adminToken', data.token);
                     // 跳转到管理面板
                     window.location.href = '/dashboard';
                 } else {

@@ -556,8 +556,22 @@
                 await this.loadModels();
             },
             methods: {
+                // 安全的localStorage访问
+                safeLocalStorage() {
+                    try {
+                        return window.localStorage;
+                    } catch (e) {
+                        return {
+                            getItem: () => null,
+                            setItem: () => {},
+                            removeItem: () => {}
+                        };
+                    }
+                },
+
                 async checkAuth() {
-                    const token = localStorage.getItem('adminToken');
+                    const storage = this.safeLocalStorage();
+                    const token = storage.getItem('adminToken');
                     if (!token) {
                         window.location.href = '/';
                         return;
@@ -572,18 +586,19 @@
                         });
 
                         if (!response.ok) {
-                            localStorage.removeItem('adminToken');
+                            storage.removeItem('adminToken');
                             window.location.href = '/';
                         }
                     } catch (error) {
                         console.error('Auth check failed:', error);
-                        localStorage.removeItem('adminToken');
+                        storage.removeItem('adminToken');
                         window.location.href = '/';
                     }
                 },
 
                 async apiRequest(url, options = {}) {
-                    const token = localStorage.getItem('adminToken');
+                    const storage = this.safeLocalStorage();
+                    const token = storage.getItem('adminToken');
                     const defaultOptions = {
                         headers: {
                             'Content-Type': 'application/json',
@@ -594,7 +609,7 @@
                     const response = await fetch(url, { ...defaultOptions, ...options });
                     
                     if (response.status === 401) {
-                        localStorage.removeItem('adminToken');
+                        storage.removeItem('adminToken');
                         window.location.href = '/';
                         return;
                     }
@@ -727,7 +742,8 @@
                 },
 
                 logout() {
-                    localStorage.removeItem('adminToken');
+                    const storage = this.safeLocalStorage();
+                    storage.removeItem('adminToken');
                     window.location.href = '/';
                 }
             }
