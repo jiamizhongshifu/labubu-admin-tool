@@ -30,5 +30,13 @@ WHERE table_name = 'labubu_models'
 AND column_name LIKE 'image%'
 ORDER BY column_name;
 
--- 5. 显示表结构
-\d labubu_models; 
+-- 5. 显示表结构（使用标准SQL查询）
+SELECT 
+    column_name,
+    data_type,
+    character_maximum_length,
+    is_nullable,
+    column_default
+FROM information_schema.columns 
+WHERE table_name = 'labubu_models'
+ORDER BY ordinal_position; 
