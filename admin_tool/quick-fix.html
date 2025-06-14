@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Labubu管理工具 - 修复版</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .status-bar {
+            background: #f8f9fa;
+            padding: 15px 30px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .status-connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .status-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .main-content {
+            padding: 30px;
+        }
+        
+        .config-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: #4facfe;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: transform 0.2s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-danger {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .debug-info {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="container">
+            <div class="header">
+                <h1>🎯 Labubu数据管理工具</h1>
+                <p>修复版 - 解决存储访问问题</p>
+            </div>
+            
+            <div class="status-bar">
+                <div class="status-item" :class="storageStatus.class">
+                    {{ storageStatus.icon }} {{ storageStatus.text }}
+                </div>
+                <div class="status-item" :class="connectionStatus.class">
+                    {{ connectionStatus.icon }} {{ connectionStatus.text }}
+                </div>
+                <div class="status-item status-warning" v-if="!isSecureContext">
+                    ⚠️ 非安全上下文
+                </div>
+            </div>
+            
+            <div class="main-content">
+                <!-- 配置区域 -->
+                <div class="config-section">
+                    <h2>🔧 数据库配置</h2>
+                    <div class="alert alert-warning" v-if="!isSecureContext">
+                        <strong>注意：</strong> 当前页面不在安全上下文中，可能影响存储功能。建议使用HTTPS访问。
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Supabase URL</label>
+                        <input v-model="config.supabaseUrl" type="text" placeholder="https://your-project.supabase.co">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Supabase Anon Key</label>
+                        <input v-model="config.supabaseKey" type="password" placeholder="your-anon-key">
+                    </div>
+                    
+                    <button class="btn" @click="testConnection" :disabled="isConnecting">
+                        {{ isConnecting ? '连接中...' : '测试连接' }}
+                    </button>
+                    
+                    <button class="btn btn-secondary" @click="saveConfig">
+                        保存配置
+                    </button>
+                    
+                    <button class="btn btn-secondary" @click="testStorage">
+                        测试存储
+                    </button>
+                    
+                    <button class="btn btn-secondary" @click="showDebugInfo">
+                        调试信息
+                    </button>
+                </div>
+                
+                <!-- 连接状态 -->
+                <div v-if="connectionMessage" class="alert" :class="connectionMessage.type">
+                    {{ connectionMessage.text }}
+                </div>
+                
+                <!-- 调试信息 -->
+                <div v-if="showDebug" class="debug-info">
+                    <h4>🔍 调试信息</h4>
+                    <pre>{{ debugInfo }}</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 存储修复工具 - 内联版本
+        class StorageFix {
+            constructor() {
+                this.memoryStorage = {};
+                this.isStorageAvailable = this.checkStorageAvailability();
+                this.initializeStorageFix();
+            }
+
+            checkStorageAvailability() {
+                try {
+                    const test = '__storage_test__';
+                    localStorage.setItem(test, test);
+                    localStorage.removeItem(test);
+                    console.log('✅ LocalStorage 可用');
+                    return true;
+                } catch (e) {
+                    console.warn('⚠️ LocalStorage 不可用，启用内存存储备用方案:', e.message);
+                    return false;
+                }
+            }
+
+            initializeStorageFix() {
+                if (!this.isStorageAvailable) {
+                    this.createStoragePolyfill();
+                }
+            }
+
+            createStoragePolyfill() {
+                const self = this;
+                window.localStorage = {
+                    getItem: function(key) {
+                        return self.memoryStorage[key] || null;
+                    },
+                    setItem: function(key, value) {
+                        self.memoryStorage[key] = String(value);
+                    },
+                    removeItem: function(key) {
+                        delete self.memoryStorage[key];
+                    },
+                    clear: function() {
+                        self.memoryStorage = {};
+                    },
+                    get length() {
+                        return Object.keys(self.memoryStorage).length;
+                    },
+                    key: function(index) {
+                        const keys = Object.keys(self.memoryStorage);
+                        return keys[index] || null;
+                    }
+                };
+                console.log('🔧 已启用localStorage兼容层');
+            }
+
+            safeGetItem(key) {
+                try {
+                    if (this.isStorageAvailable) {
+                        return localStorage.getItem(key);
+                    } else {
+                        return this.memoryStorage[key] || null;
+                    }
+                } catch (e) {
+                    console.warn(`获取存储项失败 ${key}:`, e.message);
+                    return this.memoryStorage[key] || null;
+                }
+            }
+
+            safeSetItem(key, value) {
+                try {
+                    if (this.isStorageAvailable) {
+                        localStorage.setItem(key, value);
+                    } else {
+                        this.memoryStorage[key] = value;
+                    }
+                    return true;
+                } catch (e) {
+                    console.warn(`设置存储项失败 ${key}:`, e.message);
+                    this.memoryStorage[key] = value;
+                    return false;
+                }
+            }
+
+            getStorageInfo() {
+                return {
+                    isStorageAvailable: this.isStorageAvailable,
+                    memoryStorageKeys: Object.keys(this.memoryStorage),
+                    memoryStorageSize: Object.keys(this.memoryStorage).length,
+                    userAgent: navigator.userAgent,
+                    isSecureContext: window.isSecureContext,
+                    protocol: window.location.protocol
+                };
+            }
+
+            testStorage() {
+                const testKey = 'storage_test_' + Date.now();
+                const testValue = 'test_value_' + Math.random();
+                
+                const setResult = this.safeSetItem(testKey, testValue);
+                const getValue = this.safeGetItem(testKey);
+                const getResult = getValue === testValue;
+                
+                return {
+                    setResult,
+                    getResult,
+                    overallResult: setResult && getResult,
+                    storageInfo: this.getStorageInfo()
+                };
+            }
+        }
+
+        // 初始化存储修复
+        const storageFix = new StorageFix();
+        window.safeStorage = {
+            getItem: (key) => storageFix.safeGetItem(key),
+            setItem: (key, value) => storageFix.safeSetItem(key, value),
+            test: () => storageFix.testStorage(),
+            info: () => storageFix.getStorageInfo()
+        };
+
+        const { createApp } = Vue;
+        const { createClient } = supabase;
+
+        createApp({
+            data() {
+                return {
+                    config: {
+                        supabaseUrl: '',
+                        supabaseKey: ''
+                    },
+                    supabase: null,
+                    isConnected: false,
+                    isConnecting: false,
+                    connectionMessage: null,
+                    showDebug: false,
+                    debugInfo: '',
+                    isSecureContext: window.isSecureContext
+                }
+            },
+            
+            computed: {
+                storageStatus() {
+                    const info = window.safeStorage.info();
+                    if (info.isStorageAvailable) {
+                        return {
+                            class: 'status-connected',
+                            icon: '✅',
+                            text: 'LocalStorage 可用'
+                        };
+                    } else {
+                        return {
+                            class: 'status-warning',
+                            icon: '⚠️',
+                            text: '使用内存存储'
+                        };
+                    }
+                },
+                
+                connectionStatus() {
+                    if (this.isConnected) {
+                        return {
+                            class: 'status-connected',
+                            icon: '🟢',
+                            text: '数据库已连接'
+                        };
+                    } else {
+                        return {
+                            class: 'status-disconnected',
+                            icon: '🔴',
+                            text: '数据库未连接'
+                        };
+                    }
+                }
+            },
+            
+            mounted() {
+                this.loadConfig();
+                this.updateDebugInfo();
+            },
+            
+            methods: {
+                loadConfig() {
+                    try {
+                        const savedUrl = window.safeStorage.getItem('supabase_url');
+                        const savedKey = window.safeStorage.getItem('supabase_key');
+                        
+                        if (savedUrl) this.config.supabaseUrl = savedUrl;
+                        if (savedKey) this.config.supabaseKey = savedKey;
+                        
+                        console.log('✅ 配置加载成功');
+                    } catch (error) {
+                        console.warn('⚠️ 配置加载失败:', error);
+                    }
+                },
+                
+                saveConfig() {
+                    try {
+                        window.safeStorage.setItem('supabase_url', this.config.supabaseUrl);
+                        window.safeStorage.setItem('supabase_key', this.config.supabaseKey);
+                        
+                        this.showMessage('配置保存成功', 'success');
+                    } catch (error) {
+                        this.showMessage('配置保存失败: ' + error.message, 'danger');
+                    }
+                },
+                
+                async testConnection() {
+                    if (!this.config.supabaseUrl || !this.config.supabaseKey) {
+                        this.showMessage('请填写完整的数据库配置', 'warning');
+                        return;
+                    }
+                    
+                    this.isConnecting = true;
+                    this.connectionMessage = null;
+                    
+                    try {
+                        this.supabase = createClient(this.config.supabaseUrl, this.config.supabaseKey);
+                        
+                        // 测试连接
+                        const { data, error } = await this.supabase
+                            .from('labubu_series')
+                            .select('count')
+                            .limit(1);
+                        
+                        if (error) {
+                            throw error;
+                        }
+                        
+                        this.isConnected = true;
+                        this.showMessage('数据库连接成功！', 'success');
+                        this.saveConfig();
+                        
+                    } catch (error) {
+                        this.isConnected = false;
+                        this.showMessage('数据库连接失败: ' + error.message, 'danger');
+                        console.error('连接错误:', error);
+                    } finally {
+                        this.isConnecting = false;
+                    }
+                },
+                
+                testStorage() {
+                    const result = window.safeStorage.test();
+                    if (result.overallResult) {
+                        this.showMessage('存储测试通过', 'success');
+                    } else {
+                        this.showMessage('存储测试部分失败，请查看控制台', 'warning');
+                    }
+                    this.updateDebugInfo();
+                },
+                
+                showDebugInfo() {
+                    this.showDebug = !this.showDebug;
+                    if (this.showDebug) {
+                        this.updateDebugInfo();
+                    }
+                },
+                
+                updateDebugInfo() {
+                    const info = {
+                        timestamp: new Date().toISOString(),
+                        userAgent: navigator.userAgent,
+                        isSecureContext: window.isSecureContext,
+                        location: {
+                            protocol: window.location.protocol,
+                            hostname: window.location.hostname,
+                            port: window.location.port
+                        },
+                        storage: window.safeStorage.info(),
+                        connection: {
+                            isConnected: this.isConnected,
+                            hasConfig: !!(this.config.supabaseUrl && this.config.supabaseKey)
+                        }
+                    };
+                    
+                    this.debugInfo = JSON.stringify(info, null, 2);
+                },
+                
+                showMessage(text, type) {
+                    this.connectionMessage = {
+                        text: text,
+                        type: `alert-${type}`
+                    };
+                    
+                    setTimeout(() => {
+                        this.connectionMessage = null;
+                    }, 3000);
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html> 
