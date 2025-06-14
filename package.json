@@ -1,13 +1,13 @@
 {
   "name": "labubu-admin-tool",
-  "version": "5.1.0",
+  "version": "5.2.0",
   "private": true,
-  "description": "Labubu数据管理工具 - Vercel部署版",
+  "description": "Labubu数据管理工具 - Vercel部署版 - 图片管理功能",
   "type": "module",
   "main": "index.js",
   "scripts": {
     "dev": "vercel dev",
-    "build": "cp -r public/. dist/",
+    "build": "mkdir -p dist && cp -r public/. dist/",
     "start": "vercel dev",
     "test-local": "node test-local.js",
     "deploy-check": "node scripts/deploy-check.js",
@@ -21,7 +21,7 @@
   "devDependencies": {
     "vercel": "^32.0.0"
   },
-  "keywords": ["labubu", "admin", "management", "vercel"],
+  "keywords": ["labubu", "admin", "management", "vercel", "image-upload"],
   "author": "Labubu Team",
   "license": "MIT"
 } 
