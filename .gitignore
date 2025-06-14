@@ -47,5 +47,10 @@ iOSInjectionProject/
 
 # Environment variables
 .env
+.env.local
+.vercel
+*.log
 admin_tool/config.js
 admin_vercel/node_modules/
+
+node_modules/

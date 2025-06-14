@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Labubu数据管理工具</title>
+    <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
+    <script>
+        // 全局存储访问保护和错误处理
+        (function() {
+            'use strict';
+            
+            // 捕获所有未处理的错误
+            window.addEventListener('error', function(e) {
+                if (e.message && e.message.includes('storage')) {
+                    console.warn('Storage error caught:', e.message);
+                    e.preventDefault();
+                }
+            });
+            
+            window.addEventListener('unhandledrejection', function(e) {
+                if (e.reason && e.reason.message && e.reason.message.includes('storage')) {
+                    console.warn('Storage promise rejection caught:', e.reason.message);
+                    e.preventDefault();
+                }
+            });
+            
+            // 创建安全的存储访问器
+            window.SafeStorage = {
+                _memoryStorage: new Map(),
+                _storageAvailable: null,
+                
+                isStorageAvailable() {
+                    if (this._storageAvailable !== null) {
+                        return this._storageAvailable;
+                    }
+                    
+                    try {
+                        // 检查基本条件
+                        if (typeof window === 'undefined' || !window.localStorage) {
+                            this._storageAvailable = false;
+                            return false;
+                        }
+                        
+                        // 检查是否在安全上下文中
+                        if (location.protocol === 'file:' || 
+                            (location.protocol === 'http:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1')) {
+                            console.warn('Storage may not be available in this context');
+                        }
+                        
+                        // 测试存储访问
+                        const testKey = '__storage_test_' + Date.now();
+                        window.localStorage.setItem(testKey, 'test');
+                        const testValue = window.localStorage.getItem(testKey);
+                        window.localStorage.removeItem(testKey);
+                        
+                        this._storageAvailable = (testValue === 'test');
+                        return this._storageAvailable;
+                    } catch (e) {
+                        console.warn('Storage availability test failed:', e.message);
+                        this._storageAvailable = false;
+                        return false;
+                    }
+                },
+                
+                getItem(key) {
+                    try {
+                        if (this.isStorageAvailable()) {
+                            return window.localStorage.getItem(key);
+                        } else {
+                            return this._memoryStorage.get(key) || null;
+                        }
+                    } catch (e) {
+                        console.warn('Storage getItem failed, using memory storage:', e.message);
+                        return this._memoryStorage.get(key) || null;
+                    }
+                },
+                
+                setItem(key, value) {
+                    try {
+                        if (this.isStorageAvailable()) {
+                            window.localStorage.setItem(key, value);
+                        } else {
+                            this._memoryStorage.set(key, String(value));
+                        }
+                    } catch (e) {
+                        console.warn('Storage setItem failed, using memory storage:', e.message);
+                        this._memoryStorage.set(key, String(value));
+                    }
+                },
+                
+                removeItem(key) {
+                    try {
+                        if (this.isStorageAvailable()) {
+                            window.localStorage.removeItem(key);
+                        } else {
+                            this._memoryStorage.delete(key);
+                        }
+                    } catch (e) {
+                        console.warn('Storage removeItem failed, using memory storage:', e.message);
+                        this._memoryStorage.delete(key);
+                    }
+                },
+                
+                clear() {
+                    try {
+                        if (this.isStorageAvailable()) {
+                            window.localStorage.clear();
+                        } else {
+                            this._memoryStorage.clear();
+                        }
+                    } catch (e) {
+                        console.warn('Storage clear failed, using memory storage:', e.message);
+                        this._memoryStorage.clear();
+                    }
+                }
+            };
+            
+            // 禁用Vue开发模式警告
+            if (window.Vue && window.Vue.config) {
+                window.Vue.config.devtools = false;
+                window.Vue.config.productionTip = false;
+            }
+            
+            // 添加调试信息
+            console.log('SafeStorage initialized. Storage available:', window.SafeStorage.isStorageAvailable());
+        })();
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #667eea;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .header p {
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a6fd8;
+            transform: translateY(-2px);
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .main-content {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .models-section {
+            margin-bottom: 30px;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 10px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 30px;
+        }
+
+        .alert {
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .db-status {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="container">
+            <!-- 头部 -->
+            <div class="header">
+                <div>
+                    <h1>Labubu数据管理工具</h1>
+                    <p>管理Labubu模型数据、图片和价格信息</p>
+                </div>
+                <div class="user-info">
+                    <span class="status-indicator status-success">
+                        ✓ 管理员已登录
+                    </span>
+                    <button @click="logout" class="btn btn-danger">退出登录</button>
+                </div>
+            </div>
+
+            <!-- 主要内容 -->
+            <div class="main-content">
+                <!-- 数据库状态 -->
+                <div class="db-status">
+                    <div v-if="dbConnected" class="status-indicator status-success">
+                        ✓ 数据库连接正常
+                    </div>
+                    <div v-else class="status-indicator status-error">
+                        ✗ 数据库连接失败，请检查配置
+                    </div>
+                </div>
+
+                <!-- 标签页 -->
+                <div class="tabs">
+                    <button class="tab" :class="{active: activeTab === 'models'}" @click="activeTab = 'models'">
+                        📦 模型管理
+                    </button>
+                    <button class="tab" :class="{active: activeTab === 'series'}" @click="activeTab = 'series'">
+                        📚 系列管理
+                    </button>
+                    <button class="tab" :class="{active: activeTab === 'stats'}" @click="activeTab = 'stats'">
+                        📊 数据统计
+                    </button>
+                </div>
+
+                <!-- 模型管理 -->
+                <div v-show="activeTab === 'models'" class="tab-content">
+                    <div class="models-section">
+                        <div class="section-header">
+                            <h2 class="section-title">模型管理</h2>
+                            <button @click="showAddModal" class="btn btn-primary">添加新模型</button>
+                        </div>
+
+                        <div v-if="loading" class="loading">
+                            加载中...
+                        </div>
+
+                        <div v-else-if="models.length === 0" class="empty-state">
+                            暂无模型数据
+                        </div>
+
+                        <div v-else class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>名称</th>
+                                        <th>系列</th>
+                                        <th>发售价格</th>
+                                        <th>参考价格</th>
+                                        <th>稀有度</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="model in models" :key="model.id">
+                                        <td>{{ model.id }}</td>
+                                        <td>{{ model.name }}</td>
+                                        <td>{{ model.series }}</td>
+                                        <td>{{ model.release_price || '-' }}</td>
+                                        <td>{{ model.reference_price || '-' }}</td>
+                                        <td>{{ model.rarity || '-' }}</td>
+                                        <td>
+                                            <button @click="editModel(model)" class="btn btn-secondary" style="margin-right: 5px;">编辑</button>
+                                            <button @click="deleteModel(model.id)" class="btn btn-danger">删除</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 系列管理 -->
+                <div v-show="activeTab === 'series'" class="tab-content">
+                    <div class="section-header">
+                        <h2 class="section-title">系列管理</h2>
+                        <button @click="showAddSeriesModal" class="btn btn-primary">添加新系列</button>
+                    </div>
+                    
+                    <div v-if="seriesLoading" class="loading">
+                        加载系列数据中...
+                    </div>
+                    
+                    <div v-else-if="series.length === 0" class="empty-state">
+                        暂无系列数据
+                    </div>
+                    
+                    <div v-else class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>系列名称</th>
+                                    <th>描述</th>
+                                    <th>模型数量</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="s in series" :key="s.id">
+                                    <td>{{ s.id }}</td>
+                                    <td>{{ s.name }}</td>
+                                    <td>{{ s.description || '-' }}</td>
+                                    <td>{{ getSeriesModelCount(s.name) }}</td>
+                                    <td>
+                                        <button @click="editSeries(s)" class="btn btn-secondary" style="margin-right: 5px;">编辑</button>
+                                        <button @click="deleteSeries(s.id)" class="btn btn-danger">删除</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 数据统计 -->
+                <div v-show="activeTab === 'stats'" class="tab-content">
+                    <h2 class="section-title">数据统计</h2>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-number">{{ models.length }}</div>
+                            <div class="stat-label">总模型数量</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">{{ uniqueSeries.length }}</div>
+                            <div class="stat-label">系列数量</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">{{ rarityStats.rare }}</div>
+                            <div class="stat-label">稀有模型</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">{{ rarityStats.hidden }}</div>
+                            <div class="stat-label">隐藏模型</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 模型编辑模态框 -->
+        <div class="modal" :class="{show: showModal}">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title">{{ editingModel ? '编辑模型' : '添加新模型' }}</h3>
+                    <button @click="closeModal" class="close-btn">&times;</button>
+                </div>
+
+                <div v-if="modalError" class="alert alert-error">
+                    {{ modalError }}
+                </div>
+
+                <form @submit.prevent="saveModel">
+                    <div class="form-group">
+                        <label class="form-label">模型名称 *</label>
+                        <input v-model="modelForm.name" type="text" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">系列名称 *</label>
+                        <input v-model="modelForm.series" type="text" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">发售价格</label>
+                        <input v-model="modelForm.release_price" type="number" step="0.01" class="form-control">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">参考价格</label>
+                        <input v-model="modelForm.reference_price" type="number" step="0.01" class="form-control">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">稀有度</label>
+                        <select v-model="modelForm.rarity" class="form-control">
+                            <option value="">请选择稀有度</option>
+                            <option value="普通">普通</option>
+                            <option value="不常见">不常见</option>
+                            <option value="稀有">稀有</option>
+                            <option value="超稀有">超稀有</option>
+                            <option value="隐藏">隐藏</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">特征描述</label>
+                        <textarea v-model="modelForm.features" class="form-control" rows="4" 
+                                  placeholder="请输入JSON格式的特征描述，包含颜色、材质、系列、形状等信息"></textarea>
+                        <small style="color: #666; margin-top: 5px; display: block;">
+                            特征描述 (JSON格式)
+                        </small>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" @click="closeModal" class="btn btn-secondary">取消</button>
+                        <button type="submit" class="btn btn-primary" :disabled="saving">
+                            {{ saving ? '保存中...' : '保存' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    activeTab: 'models',
+                    models: [],
+                    series: [],
+                    loading: true,
+                    seriesLoading: false,
+                    dbConnected: false,
+                    showModal: false,
+                    editingModel: null,
+                    saving: false,
+                    modalError: '',
+                    modelForm: {
+                        name: '',
+                        series: '',
+                        release_price: '',
+                        reference_price: '',
+                        rarity: '',
+                        features: ''
+                    }
+                };
+            },
+            computed: {
+                uniqueSeries() {
+                    const seriesSet = new Set(this.models.map(m => m.series).filter(Boolean));
+                    return Array.from(seriesSet);
+                },
+                rarityStats() {
+                    const stats = { rare: 0, hidden: 0 };
+                    this.models.forEach(model => {
+                        if (model.rarity === '稀有' || model.rarity === '超稀有') {
+                            stats.rare++;
+                        }
+                        if (model.rarity === '隐藏') {
+                            stats.hidden++;
+                        }
+                    });
+                    return stats;
+                }
+            },
+            async mounted() {
+                // 等待DOM完全加载
+                await this.$nextTick();
+                
+                // 检查认证
+                await this.checkAuth();
+                
+                // 加载数据
+                await this.loadModels();
+                await this.loadSeries();
+            },
+            methods: {
+                // 使用全局安全存储访问器
+                safeLocalStorage() {
+                    return window.SafeStorage;
+                },
+
+                async checkAuth() {
+                    try {
+                        const storage = this.safeLocalStorage();
+                        const token = storage.getItem('adminToken');
+                        if (!token) {
+                            window.location.href = '/';
+                            return;
+                        }
+
+                        // 验证token
+                        const response = await fetch('/api/verify-token', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            }
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Token验证失败');
+                        }
+                    } catch (error) {
+                        console.error('认证检查失败:', error);
+                        window.location.href = '/';
+                    }
+                },
+
+                async apiRequest(url, options = {}) {
+                    try {
+                        const storage = this.safeLocalStorage();
+                        const token = storage.getItem('adminToken');
+                        const defaultOptions = {
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            }
+                        };
+
+                        const response = await fetch(url, { ...defaultOptions, ...options });
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+
+                        return await response.json();
+                    } catch (error) {
+                        console.error('API请求失败:', error);
+                        throw error;
+                    }
+                },
+
+                async loadModels() {
+                    try {
+                        this.loading = true;
+                        const data = await this.apiRequest('/api/models');
+                        this.models = data.models || [];
+                        this.dbConnected = true;
+                    } catch (error) {
+                        console.error('加载模型失败:', error);
+                        this.dbConnected = false;
+                        this.models = [];
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async loadSeries() {
+                    try {
+                        this.seriesLoading = true;
+                        // 如果没有专门的系列API，从模型中提取
+                        const uniqueSeriesNames = this.uniqueSeries;
+                        this.series = uniqueSeriesNames.map((name, index) => ({
+                            id: index + 1,
+                            name: name,
+                            description: `${name}系列`
+                        }));
+                    } catch (error) {
+                        console.error('加载系列失败:', error);
+                        this.series = [];
+                    } finally {
+                        this.seriesLoading = false;
+                    }
+                },
+
+                getSeriesModelCount(seriesName) {
+                    return this.models.filter(model => model.series === seriesName).length;
+                },
+
+                showAddModal() {
+                    this.editingModel = null;
+                    this.modelForm = {
+                        name: '',
+                        series: '',
+                        release_price: '',
+                        reference_price: '',
+                        rarity: '',
+                        features: ''
+                    };
+                    this.modalError = '';
+                    this.showModal = true;
+                },
+
+                showAddSeriesModal() {
+                    alert('系列管理功能开发中...');
+                },
+
+                editModel(model) {
+                    this.editingModel = model;
+                    this.modelForm = { ...model };
+                    this.modalError = '';
+                    this.showModal = true;
+                },
+
+                editSeries(series) {
+                    alert('系列编辑功能开发中...');
+                },
+
+                closeModal() {
+                    this.showModal = false;
+                    this.editingModel = null;
+                    this.modalError = '';
+                },
+
+                async saveModel() {
+                    try {
+                        this.saving = true;
+                        this.modalError = '';
+
+                        // 验证必填字段
+                        if (!this.modelForm.name || !this.modelForm.series) {
+                            this.modalError = '请填写必填字段';
+                            return;
+                        }
+
+                        // 验证JSON格式的特征描述
+                        if (this.modelForm.features) {
+                            try {
+                                JSON.parse(this.modelForm.features);
+                            } catch (e) {
+                                this.modalError = '特征描述必须是有效的JSON格式';
+                                return;
+                            }
+                        }
+
+                        const url = this.editingModel ? `/api/models/${this.editingModel.id}` : '/api/models';
+                        const method = this.editingModel ? 'PUT' : 'POST';
+
+                        await this.apiRequest(url, {
+                            method: method,
+                            body: JSON.stringify(this.modelForm)
+                        });
+
+                        this.closeModal();
+                        await this.loadModels();
+                        alert(this.editingModel ? '模型更新成功' : '模型添加成功');
+                    } catch (error) {
+                        console.error('保存模型失败:', error);
+                        this.modalError = '保存失败，请稍后重试';
+                    } finally {
+                        this.saving = false;
+                    }
+                },
+
+                async deleteModel(id) {
+                    if (!confirm('确定要删除这个模型吗？')) {
+                        return;
+                    }
+
+                    try {
+                        await this.apiRequest(`/api/models/${id}`, {
+                            method: 'DELETE'
+                        });
+                        await this.loadModels();
+                        alert('删除成功');
+                    } catch (error) {
+                        console.error('删除模型失败:', error);
+                        alert('删除失败，请稍后重试');
+                    }
+                },
+
+                async deleteSeries(id) {
+                    if (!confirm('确定要删除这个系列吗？')) {
+                        return;
+                    }
+                    alert('系列删除功能开发中...');
+                },
+
+                logout() {
+                    const storage = this.safeLocalStorage();
+                    storage.removeItem('adminToken');
+                    window.location.href = '/';
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html> 

@@ -1,0 +1,67 @@
+    <script>
+        // 完全安全的localStorage访问
+        function safeLocalStorage() {
+            try {
+                // 检查是否在安全上下文中
+                if (typeof window === 'undefined') {
+                    return createMemoryStorage();
+                }
+                
+                // 检查localStorage是否存在
+                if (!window.localStorage) {
+                    return createMemoryStorage();
+                }
+                
+                // 测试localStorage是否可以使用
+                const testKey = '__test_storage__';
+                window.localStorage.setItem(testKey, 'test');
+                window.localStorage.removeItem(testKey);
+                
+                return window.localStorage;
+            } catch (e) {
+                console.warn('localStorage not available, using memory storage:', e.message);
+                return createMemoryStorage();
+            }
+        }
+
+        // 创建内存存储
+        function createMemoryStorage() {
+            const storage = new Map();
+            return {
+                getItem: (key) => storage.get(key) || null,
+                setItem: (key, value) => storage.set(key, String(value)),
+                removeItem: (key) => storage.delete(key),
+                clear: () => storage.clear(),
+                get length() { return storage.size; },
+                key: (index) => Array.from(storage.keys())[index] || null
+            };
+        }
+
+        // 延迟执行，确保页面完全加载
+        document.addEventListener('DOMContentLoaded', function() {
+            // 检查是否已经登录
+            const storage = safeLocalStorage();
+            const token = storage.getItem('adminToken');
+            
+            if (token) {
+                // 验证token是否有效
+                fetch('/api/verify-token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        window.location.href = '/dashboard';
+                    } else {
+                        storage.removeItem('adminToken');
+                    }
+                })
+                .catch(() => {
+                    storage.removeItem('adminToken');
+                });
+            }
+        });
+    </script> 

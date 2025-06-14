@@ -119,7 +119,7 @@ class LabubuSupabaseDatabaseService: ObservableObject {
         print("🔑 [Supabase数据库] Authorization头: Bearer \(String(apiKey.prefix(20)))...")
         print("🔑 [Supabase数据库] apikey头: \(String(apiKey.prefix(20)))...")
         print("🚀 [Supabase数据库] 发送请求...")
-
+        
         let (modelsData, modelsResponse) = try await URLSession.shared.data(for: modelsRequest)
         
         guard let httpModelsResponse = modelsResponse as? HTTPURLResponse,
@@ -155,7 +155,7 @@ class LabubuSupabaseDatabaseService: ObservableObject {
             }
             throw LabubuDatabaseError.networkError("获取模型数据失败")
         }
-
+        
         do {
             let models = try JSONDecoder().decode([LabubuModelData].self, from: modelsData)
             print("📊 [Supabase数据库] 成功解码 \(models.count) 个模型")
