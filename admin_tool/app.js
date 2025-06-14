@@ -1,6 +1,70 @@
 const { createApp } = Vue;
 const { createClient } = supabase;
 
+// 安全的存储访问工具
+const SafeStorage = {
+    // 检查存储是否可用
+    isStorageAvailable() {
+        try {
+            const test = '__storage_test__';
+            localStorage.setItem(test, test);
+            localStorage.removeItem(test);
+            return true;
+        } catch (e) {
+            console.warn('LocalStorage不可用，将使用内存存储:', e.message);
+            return false;
+        }
+    },
+    
+    // 内存存储备用方案
+    memoryStorage: {},
+    
+    // 安全获取存储项
+    getItem(key) {
+        try {
+            if (this.isStorageAvailable()) {
+                return localStorage.getItem(key);
+            } else {
+                return this.memoryStorage[key] || null;
+            }
+        } catch (e) {
+            console.warn(`获取存储项失败 ${key}:`, e.message);
+            return this.memoryStorage[key] || null;
+        }
+    },
+    
+    // 安全设置存储项
+    setItem(key, value) {
+        try {
+            if (this.isStorageAvailable()) {
+                localStorage.setItem(key, value);
+            } else {
+                this.memoryStorage[key] = value;
+            }
+            return true;
+        } catch (e) {
+            console.warn(`设置存储项失败 ${key}:`, e.message);
+            this.memoryStorage[key] = value;
+            return false;
+        }
+    },
+    
+    // 安全移除存储项
+    removeItem(key) {
+        try {
+            if (this.isStorageAvailable()) {
+                localStorage.removeItem(key);
+            }
+            delete this.memoryStorage[key];
+            return true;
+        } catch (e) {
+            console.warn(`移除存储项失败 ${key}:`, e.message);
+            delete this.memoryStorage[key];
+            return false;
+        }
+    }
+};
+
 createApp({
     data() {
         return {
@@ -11,10 +75,10 @@ createApp({
             lastConnectionCheck: null, // 最后连接检查时间
             cacheValidDuration: 5 * 60 * 1000, // 缓存有效期：5分钟
             
-            // 配置
+            // 配置 - 使用安全存储
             config: {
-                supabaseUrl: localStorage.getItem('supabase_url') || '',
-                serviceRoleKey: localStorage.getItem('service_role_key') || ''
+                supabaseUrl: SafeStorage.getItem('supabase_url') || '',
+                serviceRoleKey: SafeStorage.getItem('service_role_key') || ''
             },
             
             // UI状态
@@ -94,7 +158,11 @@ createApp({
             },
             
             // 导入功能
-            importPreview: null
+            importPreview: null,
+            
+            // 错误状态跟踪
+            storageError: false,
+            connectionError: null
         }
     },
     
@@ -105,19 +173,45 @@ createApp({
     },
 
     mounted() {
+        // 检查存储可用性
+        this.checkStorageAvailability();
+        
         // 尝试从缓存恢复连接
         this.tryRestoreConnection();
     },
     
     methods: {
+        // ===== 存储管理 =====
+        
+        // 检查存储可用性
+        checkStorageAvailability() {
+            this.storageError = !SafeStorage.isStorageAvailable();
+            if (this.storageError) {
+                this.showAlert('浏览器存储不可用，将使用临时存储（刷新页面后配置会丢失）', 'warning');
+            }
+        },
+        
+        // 安全保存配置
+        saveConfig() {
+            try {
+                SafeStorage.setItem('supabase_url', this.config.supabaseUrl);
+                SafeStorage.setItem('service_role_key', this.config.serviceRoleKey);
+                return true;
+            } catch (error) {
+                console.error('保存配置失败:', error);
+                this.showAlert('保存配置失败，请检查浏览器设置', 'error');
+                return false;
+            }
+        },
+        
         // ===== 连接管理 =====
         
         // 尝试从缓存恢复连接
         async tryRestoreConnection() {
             try {
                 // 检查是否有缓存的连接信息
-                const cachedConnectionTime = localStorage.getItem('connection_time');
-                const cachedConnectionStatus = localStorage.getItem('connection_status');
+                const cachedConnectionTime = SafeStorage.getItem('connection_time');
+                const cachedConnectionStatus = SafeStorage.getItem('connection_status');
                 
                 if (cachedConnectionTime && cachedConnectionStatus === 'connected') {
                     const cacheAge = Date.now() - parseInt(cachedConnectionTime);
@@ -156,6 +250,7 @@ createApp({
                 
             } catch (error) {
                 console.warn('缓存恢复失败，尝试正常连接:', error);
+                this.connectionError = error.message;
                 if (this.config.supabaseUrl && this.config.serviceRoleKey) {
                     await this.connectToSupabase();
                 }
@@ -178,9 +273,11 @@ createApp({
                 
                 if (!error) {
                     this.showAlert('连接验证成功！', 'success');
+                    this.connectionError = null;
                     return true;
                 } else {
                     this.showAlert(`连接验证失败: ${error.message}`, 'error');
+                    this.connectionError = error.message;
                     // 清除缓存，因为连接已失效
                     this.clearConnectionCache();
                     this.isConnected = false;
@@ -189,6 +286,7 @@ createApp({
             } catch (error) {
                 console.warn('连接验证失败:', error);
                 this.showAlert(`连接验证失败: ${error.message}`, 'error');
+                this.connectionError = error.message;
                 // 清除缓存，因为连接已失效
                 this.clearConnectionCache();
                 this.isConnected = false;
@@ -209,8 +307,8 @@ createApp({
         
         // 清除连接缓存
         clearConnectionCache() {
-            localStorage.removeItem('connection_time');
-            localStorage.removeItem('connection_status');
+            SafeStorage.removeItem('connection_time');
+            SafeStorage.removeItem('connection_status');
             this.connectionCached = false;
             this.lastConnectionCheck = null;
         },
@@ -243,10 +341,9 @@ createApp({
                 await this.checkStorageBucket();
                 
                 // 保存配置和连接缓存
-                localStorage.setItem('supabase_url', this.config.supabaseUrl);
-                localStorage.setItem('service_role_key', this.config.serviceRoleKey);
-                localStorage.setItem('connection_time', Date.now().toString());
-                localStorage.setItem('connection_status', 'connected');
+                this.saveConfig();
+                SafeStorage.setItem('connection_time', Date.now().toString());
+                SafeStorage.setItem('connection_status', 'connected');
                 
                 this.isConnected = true;
                 this.connectionCached = false; // 这是新的连接，不是缓存

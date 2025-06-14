@@ -1,1 +1,264 @@
- 
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>存储访问测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .warning { background: #fff3cd; color: #856404; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 存储访问测试工具</h1>
+    
+    <div class="test-section">
+        <h2>1. 存储可用性检测</h2>
+        <button onclick="testStorageAvailability()">测试存储可用性</button>
+        <div id="storageResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. 安全存储操作测试</h2>
+        <button onclick="testSafeStorage()">测试安全存储</button>
+        <div id="safeStorageResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. 错误模拟测试</h2>
+        <button onclick="simulateStorageError()">模拟存储错误</button>
+        <div id="errorSimulationResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>4. 浏览器环境信息</h2>
+        <button onclick="showBrowserInfo()">显示环境信息</button>
+        <div id="browserInfo"></div>
+    </div>
+
+    <script>
+        // 安全的存储访问工具（与主应用相同）
+        const SafeStorage = {
+            isStorageAvailable() {
+                try {
+                    const test = '__storage_test__';
+                    localStorage.setItem(test, test);
+                    localStorage.removeItem(test);
+                    return true;
+                } catch (e) {
+                    console.warn('LocalStorage不可用，将使用内存存储:', e.message);
+                    return false;
+                }
+            },
+            
+            memoryStorage: {},
+            
+            getItem(key) {
+                try {
+                    if (this.isStorageAvailable()) {
+                        return localStorage.getItem(key);
+                    } else {
+                        return this.memoryStorage[key] || null;
+                    }
+                } catch (e) {
+                    console.warn(`获取存储项失败 ${key}:`, e.message);
+                    return this.memoryStorage[key] || null;
+                }
+            },
+            
+            setItem(key, value) {
+                try {
+                    if (this.isStorageAvailable()) {
+                        localStorage.setItem(key, value);
+                    } else {
+                        this.memoryStorage[key] = value;
+                    }
+                    return true;
+                } catch (e) {
+                    console.warn(`设置存储项失败 ${key}:`, e.message);
+                    this.memoryStorage[key] = value;
+                    return false;
+                }
+            },
+            
+            removeItem(key) {
+                try {
+                    if (this.isStorageAvailable()) {
+                        localStorage.removeItem(key);
+                    }
+                    delete this.memoryStorage[key];
+                    return true;
+                } catch (e) {
+                    console.warn(`移除存储项失败 ${key}:`, e.message);
+                    delete this.memoryStorage[key];
+                    return false;
+                }
+            }
+        };
+
+        function testStorageAvailability() {
+            const result = document.getElementById('storageResult');
+            const isAvailable = SafeStorage.isStorageAvailable();
+            
+            if (isAvailable) {
+                result.innerHTML = '<div class="status success">✅ LocalStorage 可用</div>';
+            } else {
+                result.innerHTML = '<div class="status error">❌ LocalStorage 不可用，将使用内存存储</div>';
+            }
+        }
+
+        function testSafeStorage() {
+            const result = document.getElementById('safeStorageResult');
+            const testKey = 'test_key_' + Date.now();
+            const testValue = 'test_value_' + Math.random();
+            
+            try {
+                // 测试设置
+                const setResult = SafeStorage.setItem(testKey, testValue);
+                
+                // 测试获取
+                const getValue = SafeStorage.getItem(testKey);
+                
+                // 测试删除
+                const removeResult = SafeStorage.removeItem(testKey);
+                
+                const report = `
+                    <div class="status success">✅ 安全存储测试通过</div>
+                    <pre>设置结果: ${setResult}
+获取值: ${getValue}
+删除结果: ${removeResult}
+测试键: ${testKey}
+测试值: ${testValue}</pre>
+                `;
+                
+                result.innerHTML = report;
+            } catch (error) {
+                result.innerHTML = `<div class="status error">❌ 安全存储测试失败: ${error.message}</div>`;
+            }
+        }
+
+        function simulateStorageError() {
+            const result = document.getElementById('errorSimulationResult');
+            
+            // 临时禁用localStorage来模拟错误
+            const originalLocalStorage = window.localStorage;
+            
+            try {
+                // 模拟存储不可用的情况
+                Object.defineProperty(window, 'localStorage', {
+                    get() {
+                        throw new Error('Access to storage is not allowed from this context.');
+                    }
+                });
+                
+                // 测试在错误情况下的行为
+                const testKey = 'error_test_key';
+                const testValue = 'error_test_value';
+                
+                const setResult = SafeStorage.setItem(testKey, testValue);
+                const getValue = SafeStorage.getItem(testKey);
+                
+                result.innerHTML = `
+                    <div class="status warning">⚠️ 错误模拟测试完成</div>
+                    <pre>模拟存储错误情况下:
+设置结果: ${setResult}
+获取值: ${getValue}
+内存存储状态: ${JSON.stringify(SafeStorage.memoryStorage, null, 2)}</pre>
+                `;
+                
+            } catch (error) {
+                result.innerHTML = `<div class="status error">❌ 错误模拟失败: ${error.message}</div>`;
+            } finally {
+                // 恢复localStorage
+                Object.defineProperty(window, 'localStorage', {
+                    value: originalLocalStorage,
+                    writable: true
+                });
+            }
+        }
+
+        function showBrowserInfo() {
+            const result = document.getElementById('browserInfo');
+            
+            const info = {
+                userAgent: navigator.userAgent,
+                cookieEnabled: navigator.cookieEnabled,
+                language: navigator.language,
+                platform: navigator.platform,
+                onLine: navigator.onLine,
+                storageQuota: 'unknown',
+                isSecureContext: window.isSecureContext,
+                location: {
+                    protocol: window.location.protocol,
+                    hostname: window.location.hostname,
+                    port: window.location.port
+                }
+            };
+            
+            // 检查存储配额（如果支持）
+            if ('storage' in navigator && 'estimate' in navigator.storage) {
+                navigator.storage.estimate().then(estimate => {
+                    info.storageQuota = {
+                        quota: estimate.quota,
+                        usage: estimate.usage,
+                        available: estimate.quota - estimate.usage
+                    };
+                    updateBrowserInfo(info);
+                }).catch(() => {
+                    updateBrowserInfo(info);
+                });
+            } else {
+                updateBrowserInfo(info);
+            }
+            
+            function updateBrowserInfo(info) {
+                result.innerHTML = `
+                    <div class="status success">📊 浏览器环境信息</div>
+                    <pre>${JSON.stringify(info, null, 2)}</pre>
+                `;
+            }
+        }
+
+        // 页面加载时自动运行基础测试
+        window.addEventListener('load', () => {
+            testStorageAvailability();
+        });
+    </script>
+</body>
+</html> 

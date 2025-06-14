@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Labubu 数据管理系统 v5.2 图片管理版</title>
+    <!-- 版本标识 v5.2 图片管理版本 - 2024-12-19 -->
+    <!-- 新增功能: 图片上传、存储、展示 -->
+    <!-- IMAGE MANAGEMENT UPDATE -->
+    <meta name="version" content="v5.2-image-management">
+    
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    
+    <!-- 🛡️ 存储错误抑制系统 v5.2 -->
+    <script>
+        (function() {
+            'use strict';
+            
+            // 简化的错误抑制系统
+            const originalConsoleError = console.error;
+            console.error = function(...args) {
+                const message = args.join(' ').toLowerCase();
+                if (message.includes('access to storage') || 
+                    message.includes('storage is not allowed') ||
+                    message.includes('localstorage') ||
+                    message.includes('content.js') ||
+                    message.includes('initial.')) {
+                    return; // 静默存储错误
+                }
+                originalConsoleError.apply(console, args);
+            };
+            
+            // Promise错误拦截
+            window.addEventListener('unhandledrejection', function(event) {
+                const reason = (event.reason || '').toString().toLowerCase();
+                if (reason.includes('access to storage') || reason.includes('storage')) {
+                    event.preventDefault();
+                    return false;
+                }
+            });
+            
+            console.log('🛡️ 存储错误抑制系统 v5.2 已激活');
+        })();
+    </script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .status-bar {
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-connected {
+            background: #10b981;
+        }
+
+        .status-disconnected {
+            background: #ef4444;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .main-content {
+            padding: 30px;
+        }
+
+        .config-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 8px;
+        }
+
+        .config-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #1f2937;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .form-label {
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .form-input {
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #4f46e5;
+        }
+
+        /* 🖼️ 图片上传样式 */
+        .image-upload-area {
+            border: 2px dashed #d1d5db;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.2s;
+            cursor: pointer;
+            background: #f9fafb;
+        }
+
+        .image-upload-area:hover {
+            border-color: #4f46e5;
+            background: #f3f4f6;
+        }
+
+        .image-upload-area.dragover {
+            border-color: #4f46e5;
+            background: #ede9fe;
+        }
+
+        .image-preview {
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: 8px;
+            margin: 10px auto;
+            display: block;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .image-info {
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin-top: 8px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .btn-primary {
+            background: #4f46e5;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #4338ca;
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .data-section {
+            margin-top: 30px;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+            vertical-align: middle;
+        }
+
+        .data-table th {
+            background: #f8fafc;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .data-table tr:hover {
+            background: #f8fafc;
+        }
+
+        /* 🖼️ 表格中的图片缩略图样式 */
+        .table-image {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .table-image:hover {
+            transform: scale(1.1);
+        }
+
+        .no-image {
+            width: 60px;
+            height: 60px;
+            background: #f3f4f6;
+            border: 1px dashed #d1d5db;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #9ca3af;
+            font-size: 0.75rem;
+        }
+
+        /* 🖼️ 图片预览模态框 */
+        .image-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            cursor: pointer;
+        }
+
+        .image-modal img {
+            max-width: 90%;
+            max-height: 90%;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+
+        .error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .success {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            color: #16a34a;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        /* 🎨 新增模型表单样式 */
+        .add-model-section {
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .main-content {
+                padding: 20px;
+            }
+            
+            .data-table {
+                font-size: 0.9rem;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .table-image {
+                width: 40px;
+                height: 40px;
+            }
+
+            .no-image {
+                width: 40px;
+                height: 40px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="container">
+            <div class="header">
+                <h1>🎯 Labubu 数据管理系统</h1>
+                <p>v5.2 图片管理版本 - 支持模型配图上传</p>
+            </div>
+
+            <div class="status-bar">
+                <div class="connection-status">
+                    <div :class="['status-indicator', isConnected ? 'status-connected' : 'status-disconnected']"></div>
+                    <span>{{ isConnected ? '数据库已连接' : '数据库未连接' }}</span>
+                </div>
+                <div>
+                    <span>模型数量: {{ models.length }}</span>
+                </div>
+            </div>
+
+            <div class="main-content">
+                <!-- 配置区域 -->
+                <div class="config-section" v-if="!isConnected">
+                    <h2 class="config-title">🔧 数据库配置</h2>
+                    <div class="form-group">
+                        <label class="form-label">Supabase URL</label>
+                        <input 
+                            type="text" 
+                            class="form-input" 
+                            v-model="config.supabaseUrl"
+                            placeholder="https://your-project.supabase.co"
+                        >
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Supabase Key</label>
+                        <input 
+                            type="password" 
+                            class="form-input" 
+                            v-model="config.supabaseKey"
+                            placeholder="your-anon-key"
+                        >
+                    </div>
+                    <button class="btn btn-primary" @click="connectDatabase" :disabled="connecting">
+                        {{ connecting ? '连接中...' : '连接数据库' }}
+                    </button>
+                </div>
+
+                <!-- 🆕 新增模型区域 -->
+                <div class="add-model-section" v-if="isConnected">
+                    <h2 class="config-title">➕ 添加新模型</h2>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">模型名称 *</label>
+                            <input 
+                                type="text" 
+                                class="form-input" 
+                                v-model="newModel.name"
+                                placeholder="输入模型名称"
+                                required
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">系列标识</label>
+                            <input 
+                                type="text" 
+                                class="form-input" 
+                                v-model="newModel.series_id"
+                                placeholder="输入系列标识"
+                            >
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">发售价格</label>
+                            <input 
+                                type="number" 
+                                class="form-input" 
+                                v-model="newModel.release_price"
+                                placeholder="0.00"
+                                step="0.01"
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">参考价格</label>
+                            <input 
+                                type="number" 
+                                class="form-input" 
+                                v-model="newModel.reference_price"
+                                placeholder="0.00"
+                                step="0.01"
+                            >
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">稀有度</label>
+                            <select class="form-input" v-model="newModel.rarity">
+                                <option value="">选择稀有度</option>
+                                <option value="Common">普通</option>
+                                <option value="Uncommon">不常见</option>
+                                <option value="Rare">稀有</option>
+                                <option value="Epic">史诗</option>
+                                <option value="Legendary">传说</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">特征信息</label>
+                            <input 
+                                type="text" 
+                                class="form-input" 
+                                v-model="newModel.features"
+                                placeholder='{"color": "粉色", "size": "标准"}'
+                            >
+                        </div>
+                    </div>
+
+                    <!-- 🖼️ 图片上传区域 -->
+                    <div class="form-group">
+                        <label class="form-label">模型配图</label>
+                        <div 
+                            class="image-upload-area"
+                            :class="{ 'dragover': dragover }"
+                            @click="triggerFileInput"
+                            @dragover.prevent="dragover = true"
+                            @dragleave.prevent="dragover = false"
+                            @drop.prevent="handleFileDrop"
+                        >
+                            <input 
+                                type="file" 
+                                ref="fileInput"
+                                @change="handleFileSelect"
+                                accept="image/*"
+                                style="display: none;"
+                            >
+                            
+                            <div v-if="!newModel.imagePreview">
+                                <div style="font-size: 2rem; margin-bottom: 10px;">📷</div>
+                                <p>点击或拖拽上传模型配图</p>
+                                <p class="image-info">支持 JPG、PNG、WebP、GIF 格式，最大 5MB</p>
+                            </div>
+                            
+                            <div v-else>
+                                <img :src="newModel.imagePreview" class="image-preview" alt="预览图">
+                                <p class="image-info">{{ newModel.imageFile?.name }}</p>
+                                <button 
+                                    type="button" 
+                                    class="btn btn-danger" 
+                                    @click.stop="clearImage"
+                                    style="margin-top: 10px;"
+                                >
+                                    🗑️ 删除图片
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 20px;">
+                        <button 
+                            class="btn btn-success" 
+                            @click="addModel" 
+                            :disabled="adding || !newModel.name"
+                        >
+                            {{ adding ? '添加中...' : '➕ 添加模型' }}
+                        </button>
+                        <button 
+                            class="btn" 
+                            @click="resetForm"
+                            style="margin-left: 10px; background: #6b7280; color: white;"
+                        >
+                            🔄 重置表单
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 数据展示区域 -->
+                <div class="data-section" v-if="isConnected">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h2 class="config-title">📊 模型数据</h2>
+                        <button class="btn btn-success" @click="loadModels">
+                            🔄 刷新数据
+                        </button>
+                    </div>
+
+                    <div v-if="loading" class="loading">
+                        <p>⏳ 加载中...</p>
+                    </div>
+
+                    <div v-if="error" class="error">
+                        <p>❌ {{ error }}</p>
+                    </div>
+
+                    <div v-if="success" class="success">
+                        <p>✅ {{ success }}</p>
+                    </div>
+
+                    <table class="data-table" v-if="models.length > 0">
+                        <thead>
+                            <tr>
+                                <th>配图</th>
+                                <th>ID</th>
+                                <th>名称</th>
+                                <th>系列</th>
+                                <th>发售价格</th>
+                                <th>参考价格</th>
+                                <th>稀有度</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="model in models" :key="model.id">
+                                <td>
+                                    <img 
+                                        v-if="model.image_url" 
+                                        :src="model.image_url" 
+                                        class="table-image" 
+                                        :alt="model.name"
+                                        @click="showImageModal(model.image_url)"
+                                        @error="handleImageError"
+                                    >
+                                    <div v-else class="no-image">
+                                        无图片
+                                    </div>
+                                </td>
+                                <td>{{ model.id }}</td>
+                                <td>{{ model.name }}</td>
+                                <td>{{ model.series || model.series_id || '-' }}</td>
+                                <td>{{ model.release_price || '-' }}</td>
+                                <td>{{ model.reference_price || '-' }}</td>
+                                <td>{{ model.rarity || '-' }}</td>
+                                <td>{{ formatDate(model.created_at) }}</td>
+                                <td>
+                                    <button 
+                                        class="btn btn-danger" 
+                                        @click="deleteModel(model.id)"
+                                        style="padding: 6px 12px; font-size: 0.875rem;"
+                                    >
+                                        🗑️
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div v-if="!loading && models.length === 0" class="loading">
+                        <p>📝 暂无数据</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 🖼️ 图片预览模态框 -->
+        <div v-if="showModal" class="image-modal" @click="closeImageModal">
+            <img :src="modalImageUrl" alt="预览图">
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        const { createClient } = supabase;
+
+        createApp({
+            data() {
+                return {
+                    config: {
+                        supabaseUrl: '',
+                        supabaseKey: ''
+                    },
+                    supabase: null,
+                    isConnected: false,
+                    connecting: false,
+                    loading: false,
+                    adding: false,
+                    models: [],
+                    error: '',
+                    success: '',
+                    dragover: false,
+                    showModal: false,
+                    modalImageUrl: '',
+                    newModel: {
+                        name: '',
+                        series_id: '',
+                        release_price: '',
+                        reference_price: '',
+                        rarity: '',
+                        features: '',
+                        imageFile: null,
+                        imagePreview: null
+                    }
+                }
+            },
+            mounted() {
+                console.log('🚀 应用启动，开始初始化...');
+                console.log('📋 版本信息: v5.2 图片管理版本 - 2024-12-19');
+                console.log('🔧 包含功能: 图片上传 + 存储 + 展示 + 原有功能');
+                
+                this.loadConfig();
+                if (this.config.supabaseUrl && this.config.supabaseKey) {
+                    this.connectDatabase();
+                }
+            },
+            methods: {
+                loadConfig() {
+                    try {
+                        const saved = localStorage.getItem('supabase_config');
+                        if (saved) {
+                            this.config = JSON.parse(saved);
+                            console.log('✅ 从存储中加载了Supabase配置');
+                        }
+                    } catch (e) {
+                        console.log('⚠️ 无法加载配置，使用默认值');
+                    }
+                },
+                
+                saveConfig() {
+                    try {
+                        localStorage.setItem('supabase_config', JSON.stringify(this.config));
+                        console.log('💾 配置已保存');
+                    } catch (e) {
+                        console.log('⚠️ 无法保存配置');
+                    }
+                },
+                
+                async connectDatabase() {
+                    if (!this.config.supabaseUrl || !this.config.supabaseKey) {
+                        this.error = '请填写完整的数据库配置信息';
+                        return;
+                    }
+                    
+                    this.connecting = true;
+                    this.error = '';
+                    
+                    try {
+                        console.log('🔄 尝试连接到Supabase...');
+                        
+                        this.supabase = createClient(
+                            this.config.supabaseUrl,
+                            this.config.supabaseKey
+                        );
+                        
+                        // 测试连接
+                        const { data, error } = await this.supabase
+                            .from('labubu_models')
+                            .select('count', { count: 'exact', head: true });
+                        
+                        if (error) {
+                            throw error;
+                        }
+                        
+                        this.isConnected = true;
+                        this.success = '数据库连接成功！';
+                        this.saveConfig();
+                        console.log('✅ Supabase连接成功');
+                        
+                        // 自动加载数据
+                        await this.loadModels();
+                        
+                    } catch (error) {
+                        console.error('❌ 数据库连接失败:', error);
+                        this.error = `连接失败: ${error.message}`;
+                        this.isConnected = false;
+                    } finally {
+                        this.connecting = false;
+                    }
+                },
+                
+                async loadModels() {
+                    if (!this.supabase) {
+                        this.error = '请先连接数据库';
+                        return;
+                    }
+                    
+                    this.loading = true;
+                    this.error = '';
+                    this.success = '';
+                    
+                    try {
+                        console.log('📥 开始加载模型数据...');
+                        console.log('🔧 v5.2 图片管理版本 - 包含图片信息');
+                        
+                        // 查询包含图片信息的模型数据
+                        const { data, error } = await this.supabase
+                            .from('labubu_models')
+                            .select(`
+                                id,
+                                name,
+                                series_id,
+                                release_price,
+                                reference_price,
+                                rarity,
+                                features,
+                                image_url,
+                                image_path,
+                                image_filename,
+                                image_size,
+                                image_type,
+                                created_at
+                            `)
+                            .order('created_at', { ascending: false });
+                        
+                        if (error) {
+                            throw error;
+                        }
+                        
+                        this.models = data || [];
+                        this.success = `成功加载 ${this.models.length} 条数据`;
+                        console.log(`✅ 成功加载 ${this.models.length} 条模型数据`);
+                        
+                    } catch (error) {
+                        console.error('❌ 加载模型失败:', error);
+                        this.error = `加载失败: ${error.message}`;
+                        this.models = [];
+                    } finally {
+                        this.loading = false;
+                        console.log('📥 模型加载完成');
+                    }
+                },
+
+                // 🖼️ 图片处理方法
+                triggerFileInput() {
+                    this.$refs.fileInput.click();
+                },
+
+                handleFileSelect(event) {
+                    const file = event.target.files[0];
+                    this.processImageFile(file);
+                },
+
+                handleFileDrop(event) {
+                    this.dragover = false;
+                    const file = event.dataTransfer.files[0];
+                    this.processImageFile(file);
+                },
+
+                processImageFile(file) {
+                    if (!file) return;
+
+                    // 验证文件类型
+                    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+                    if (!allowedTypes.includes(file.type)) {
+                        this.error = '请选择有效的图片格式 (JPG, PNG, WebP, GIF)';
+                        return;
+                    }
+
+                    // 验证文件大小 (5MB)
+                    if (file.size > 5 * 1024 * 1024) {
+                        this.error = '图片文件大小不能超过 5MB';
+                        return;
+                    }
+
+                    // 创建预览
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        this.newModel.imagePreview = e.target.result;
+                        this.newModel.imageFile = file;
+                        console.log('✅ 图片预览创建成功');
+                    };
+                    reader.readAsDataURL(file);
+                },
+
+                clearImage() {
+                    this.newModel.imageFile = null;
+                    this.newModel.imagePreview = null;
+                    this.$refs.fileInput.value = '';
+                    console.log('🗑️ 图片已清除');
+                },
+
+                // 🆕 添加模型方法
+                async addModel() {
+                    if (!this.newModel.name.trim()) {
+                        this.error = '请输入模型名称';
+                        return;
+                    }
+
+                    this.adding = true;
+                    this.error = '';
+                    this.success = '';
+
+                    try {
+                        console.log('➕ 开始添加新模型...');
+
+                        // 准备数据
+                        const modelData = {
+                            name: this.newModel.name.trim(),
+                            series_id: this.newModel.series_id.trim() || null,
+                            release_price: this.newModel.release_price ? parseFloat(this.newModel.release_price) : null,
+                            reference_price: this.newModel.reference_price ? parseFloat(this.newModel.reference_price) : null,
+                            rarity: this.newModel.rarity || null,
+                            features: this.newModel.features ? JSON.parse(this.newModel.features) : null
+                        };
+
+                        // 如果有图片，先上传图片
+                        if (this.newModel.imageFile) {
+                            console.log('📤 上传图片中...');
+                            
+                            // 生成唯一文件名
+                            const timestamp = Date.now();
+                            const randomStr = Math.random().toString(36).substring(2, 8);
+                            const fileExt = this.newModel.imageFile.name.split('.').pop().toLowerCase();
+                            const fileName = `${modelData.name.replace(/[^a-zA-Z0-9]/g, '_')}_${timestamp}_${randomStr}.${fileExt}`;
+                            const filePath = `models/${fileName}`;
+
+                            // 上传到 Supabase Storage
+                            const { data: uploadData, error: uploadError } = await this.supabase.storage
+                                .from('labubu-images')
+                                .upload(filePath, this.newModel.imageFile, {
+                                    cacheControl: '3600',
+                                    upsert: false
+                                });
+
+                            if (uploadError) {
+                                throw new Error(`图片上传失败: ${uploadError.message}`);
+                            }
+
+                            // 获取公共URL
+                            const { data: urlData } = this.supabase.storage
+                                .from('labubu-images')
+                                .getPublicUrl(filePath);
+
+                            // 添加图片信息到模型数据
+                            modelData.image_url = urlData.publicUrl;
+                            modelData.image_path = filePath;
+                            modelData.image_filename = this.newModel.imageFile.name;
+                            modelData.image_size = this.newModel.imageFile.size;
+                            modelData.image_type = this.newModel.imageFile.type;
+
+                            console.log('✅ 图片上传成功');
+                        }
+
+                        // 插入数据库
+                        const { data, error } = await this.supabase
+                            .from('labubu_models')
+                            .insert([modelData])
+                            .select()
+                            .single();
+
+                        if (error) {
+                            // 如果数据库插入失败，删除已上传的图片
+                            if (modelData.image_path) {
+                                await this.supabase.storage
+                                    .from('labubu-images')
+                                    .remove([modelData.image_path]);
+                            }
+                            throw error;
+                        }
+
+                        this.success = '模型添加成功！';
+                        console.log('✅ 模型添加成功');
+
+                        // 重置表单并刷新数据
+                        this.resetForm();
+                        await this.loadModels();
+
+                    } catch (error) {
+                        console.error('❌ 添加模型失败:', error);
+                        this.error = `添加失败: ${error.message}`;
+                    } finally {
+                        this.adding = false;
+                    }
+                },
+
+                // 🗑️ 删除模型方法
+                async deleteModel(modelId) {
+                    if (!confirm('确定要删除这个模型吗？此操作不可恢复。')) {
+                        return;
+                    }
+
+                    try {
+                        console.log(`🗑️ 删除模型 ID: ${modelId}`);
+
+                        // 获取模型信息（包含图片路径）
+                        const { data: modelData, error: fetchError } = await this.supabase
+                            .from('labubu_models')
+                            .select('image_path')
+                            .eq('id', modelId)
+                            .single();
+
+                        if (fetchError) {
+                            throw fetchError;
+                        }
+
+                        // 删除数据库记录
+                        const { error: deleteError } = await this.supabase
+                            .from('labubu_models')
+                            .delete()
+                            .eq('id', modelId);
+
+                        if (deleteError) {
+                            throw deleteError;
+                        }
+
+                        // 删除关联图片
+                        if (modelData.image_path) {
+                            await this.supabase.storage
+                                .from('labubu-images')
+                                .remove([modelData.image_path]);
+                        }
+
+                        this.success = '模型删除成功！';
+                        console.log('✅ 模型删除成功');
+
+                        // 刷新数据
+                        await this.loadModels();
+
+                    } catch (error) {
+                        console.error('❌ 删除模型失败:', error);
+                        this.error = `删除失败: ${error.message}`;
+                    }
+                },
+
+                resetForm() {
+                    this.newModel = {
+                        name: '',
+                        series_id: '',
+                        release_price: '',
+                        reference_price: '',
+                        rarity: '',
+                        features: '',
+                        imageFile: null,
+                        imagePreview: null
+                    };
+                    if (this.$refs.fileInput) {
+                        this.$refs.fileInput.value = '';
+                    }
+                    console.log('🔄 表单已重置');
+                },
+
+                // 🖼️ 图片预览模态框
+                showImageModal(imageUrl) {
+                    this.modalImageUrl = imageUrl;
+                    this.showModal = true;
+                },
+
+                closeImageModal() {
+                    this.showModal = false;
+                    this.modalImageUrl = '';
+                },
+
+                handleImageError(event) {
+                    console.warn('图片加载失败:', event.target.src);
+                    event.target.style.display = 'none';
+                },
+                
+                formatDate(dateString) {
+                    if (!dateString) return '-';
+                    try {
+                        return new Date(dateString).toLocaleString('zh-CN');
+                    } catch (e) {
+                        return dateString;
+                    }
+                },
+                
+                clearMessages() {
+                    setTimeout(() => {
+                        this.error = '';
+                        this.success = '';
+                    }, 5000);
+                }
+            },
+            watch: {
+                error(newVal) {
+                    if (newVal) this.clearMessages();
+                },
+                success(newVal) {
+                    if (newVal) this.clearMessages();
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html> 

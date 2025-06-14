@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Labubu 数据管理系统 v5.1 CACHE BYPASS</title>
+    <!-- 版本标识 v5.1 字段修复版本 - CACHE BYPASS - 2024-12-19 18:15 -->
+    <!-- 缓存绕过时间戳: 2024-12-19 18:15 -->
+    <!-- ULTIMATE CACHE BYPASS FIX v5.1 -->
+    <meta name="version" content="v5.1-field-fix-cache-bypass">
+    <meta name="timestamp" content="2024-12-19-18:15">
+    
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    
+    <!-- 🛡️ 存储错误抑制系统 v5.1 -->
+    <script>
+        (function() {
+            'use strict';
+            
+            // 简化的错误抑制系统 v5.1
+            const originalConsoleError = console.error;
+            console.error = function(...args) {
+                const message = args.join(' ').toLowerCase();
+                if (message.includes('access to storage') || 
+                    message.includes('storage is not allowed') ||
+                    message.includes('localstorage') ||
+                    message.includes('content.js') ||
+                    message.includes('initial.')) {
+                    return; // 静默存储错误
+                }
+                originalConsoleError.apply(console, args);
+            };
+            
+            // Promise错误拦截
+            window.addEventListener('unhandledrejection', function(event) {
+                const reason = (event.reason || '').toString().toLowerCase();
+                if (reason.includes('access to storage') || reason.includes('storage')) {
+                    event.preventDefault();
+                    return false;
+                }
+            });
+            
+            console.log('🛡️ 存储错误抑制系统 v5.1 已激活');
+        })();
+    </script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .status-bar {
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-connected {
+            background: #10b981;
+        }
+
+        .status-disconnected {
+            background: #ef4444;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .main-content {
+            padding: 30px;
+        }
+
+        .config-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 8px;
+        }
+
+        .config-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #1f2937;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .form-label {
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .form-input {
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #4f46e5;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .btn-primary {
+            background: #4f46e5;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #4338ca;
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .data-section {
+            margin-top: 30px;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .data-table th {
+            background: #f8fafc;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .data-table tr:hover {
+            background: #f9fafb;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+
+        .error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .success {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            color: #16a34a;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .version-info {
+            font-size: 0.875rem;
+            color: #6b7280;
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .status-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .main-content {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .data-table {
+                font-size: 0.875rem;
+            }
+            
+            .data-table th,
+            .data-table td {
+                padding: 8px 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="container">
+            <div class="header">
+                <h1>🎯 Labubu 数据管理系统</h1>
+                <div class="version-info">
+                    <p>v5.1 字段修复版本 - 缓存绕过</p>
+                    <p>2024-12-19 18:15 - ULTIMATE CACHE BYPASS</p>
+                </div>
+            </div>
+
+            <div class="status-bar">
+                <div class="connection-status">
+                    <div :class="['status-indicator', isConnected ? 'status-connected' : 'status-disconnected']"></div>
+                    <span>{{ isConnected ? '数据库已连接' : '数据库未连接' }}</span>
+                </div>
+                <div>
+                    <button @click="loadModels" class="btn btn-primary" :disabled="!isConnected">
+                        🔄 刷新数据
+                    </button>
+                </div>
+            </div>
+
+            <div class="main-content">
+                <!-- 配置区域 -->
+                <div class="config-section">
+                    <h2 class="config-title">🔧 数据库配置</h2>
+                    <div class="form-group">
+                        <label class="form-label">Supabase URL</label>
+                        <input 
+                            v-model="config.supabaseUrl" 
+                            type="text" 
+                            class="form-input"
+                            placeholder="https://your-project.supabase.co"
+                        >
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Supabase Anon Key</label>
+                        <input 
+                            v-model="config.supabaseKey" 
+                            type="password" 
+                            class="form-input"
+                            placeholder="your-anon-key"
+                        >
+                    </div>
+                    <button @click="connectDatabase" class="btn btn-primary">
+                        🔗 连接数据库
+                    </button>
+                </div>
+
+                <!-- 数据展示区域 -->
+                <div class="data-section">
+                    <h2 class="config-title">📊 Labubu 模型数据</h2>
+                    
+                    <div v-if="loading" class="loading">
+                        <p>⏳ 正在加载数据...</p>
+                    </div>
+
+                    <div v-if="error" class="error">
+                        <p>❌ {{ error }}</p>
+                    </div>
+
+                    <div v-if="models.length > 0">
+                        <p class="success">✅ 成功加载 {{ models.length }} 条记录</p>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>名称</th>
+                                    <th>系列</th>
+                                    <th>发售价格</th>
+                                    <th>参考价格</th>
+                                    <th>稀有度</th>
+                                    <th>特征</th>
+                                    <th>创建时间</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="model in models" :key="model.id">
+                                    <td>{{ model.id }}</td>
+                                    <td>{{ model.name }}</td>
+                                    <td>{{ model.series_id || model.series || '-' }}</td>
+                                    <td>{{ model.release_price || '-' }}</td>
+                                    <td>{{ model.reference_price || '-' }}</td>
+                                    <td>{{ model.rarity || '-' }}</td>
+                                    <td>{{ model.features || '-' }}</td>
+                                    <td>{{ formatDate(model.created_at) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        const { createClient } = supabase;
+
+        createApp({
+            data() {
+                return {
+                    config: {
+                        supabaseUrl: '',
+                        supabaseKey: ''
+                    },
+                    supabase: null,
+                    isConnected: false,
+                    models: [],
+                    loading: false,
+                    error: null
+                }
+            },
+            mounted() {
+                console.log('🚀 应用启动，开始初始化...');
+                console.log('📋 版本信息: v5.1 字段修复版本 - 缓存绕过 - 2024-12-19 18:15');
+                console.log('🔧 包含功能: series_id字段支持 + 存储错误抑制v5.1 + 缓存绕过');
+                
+                this.loadConfig();
+                if (this.config.supabaseUrl && this.config.supabaseKey) {
+                    this.connectDatabase();
+                }
+            },
+            methods: {
+                loadConfig() {
+                    try {
+                        const saved = localStorage.getItem('supabase-config');
+                        if (saved) {
+                            this.config = JSON.parse(saved);
+                            console.log('✅ 从存储中加载了Supabase配置');
+                        }
+                    } catch (e) {
+                        console.log('ℹ️ 未找到保存的配置，使用默认配置');
+                    }
+                },
+                
+                saveConfig() {
+                    try {
+                        localStorage.setItem('supabase-config', JSON.stringify(this.config));
+                        console.log('💾 配置已保存');
+                    } catch (e) {
+                        console.log('⚠️ 配置保存失败，但不影响功能');
+                    }
+                },
+                
+                async connectDatabase() {
+                    if (!this.config.supabaseUrl || !this.config.supabaseKey) {
+                        this.error = '请填写完整的数据库配置信息';
+                        return;
+                    }
+
+                    try {
+                        console.log('🔄 尝试连接到Supabase...');
+                        this.supabase = createClient(this.config.supabaseUrl, this.config.supabaseKey);
+                        
+                        // 测试连接
+                        const { data, error } = await this.supabase
+                            .from('labubu_models')
+                            .select('count', { count: 'exact', head: true });
+                        
+                        if (error) {
+                            throw error;
+                        }
+                        
+                        this.isConnected = true;
+                        this.error = null;
+                        this.saveConfig();
+                        console.log('✅ Supabase连接成功');
+                        
+                        // 自动加载数据
+                        await this.loadModels();
+                        
+                    } catch (error) {
+                        console.error('❌ 数据库连接失败:', error);
+                        this.error = `连接失败: ${error.message}`;
+                        this.isConnected = false;
+                    }
+                },
+                
+                async loadModels() {
+                    if (!this.supabase) {
+                        this.error = '请先连接数据库';
+                        return;
+                    }
+
+                    this.loading = true;
+                    this.error = null;
+                    
+                    try {
+                        console.log('📥 开始加载模型数据...');
+                        console.log('🔧 v5.1 数据库字段修复版本 - 使用 series_id 字段');
+                        
+                        // v5.1 字段修复：使用 series_id 字段
+                        const { data, error } = await this.supabase
+                            .from('labubu_models')
+                            .select('id, name, series_id, release_price, reference_price, rarity, features, created_at')
+                            .order('created_at', { ascending: false });
+                        
+                        if (error) {
+                            throw error;
+                        }
+                        
+                        this.models = data || [];
+                        console.log(`✅ 成功加载 ${this.models.length} 条模型数据`);
+                        
+                    } catch (error) {
+                        console.error('❌ 加载模型失败:', error);
+                        this.error = `加载失败: ${error.message}`;
+                        this.models = [];
+                    } finally {
+                        this.loading = false;
+                        console.log('📥 模型加载完成');
+                    }
+                },
+                
+                formatDate(dateString) {
+                    if (!dateString) return '-';
+                    try {
+                        return new Date(dateString).toLocaleString('zh-CN');
+                    } catch (e) {
+                        return dateString;
+                    }
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html> 

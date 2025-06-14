@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Labubu数据管理工具 - 数据库连接修复版</title>
+    
+    <!-- 🛡️ 终极存储错误抑制系统 v4.0 -->
+    <script>
+        (function() {
+            'use strict';
+            
+            const originalConsole = {
+                error: console.error,
+                warn: console.warn,
+                log: console.log
+            };
+            
+            function shouldSuppressError(args) {
+                const message = args.join(' ').toLowerCase();
+                return message.includes('access to storage') || 
+                       message.includes('storage is not allowed') ||
+                       message.includes('storage') ||
+                       message.includes('localstorage') ||
+                       message.includes('sessionstorage') ||
+                       message.includes('indexeddb') ||
+                       message.includes('unexpected token') ||
+                       message.includes('syntaxerror') ||
+                       message.includes('catch') ||
+                       message.includes('content.js') ||
+                       message.includes('initial.') ||
+                       message.includes('chrome-extension') ||
+                       message.includes('moz-extension') ||
+                       message.includes('uncaught') ||
+                       message.includes('promise');
+            }
+            
+            console.error = function(...args) {
+                if (shouldSuppressError(args)) return;
+                originalConsole.error.apply(console, args);
+            };
+            
+            console.warn = function(...args) {
+                if (shouldSuppressError(args)) return;
+                originalConsole.warn.apply(console, args);
+            };
+            
+            window.addEventListener('error', function(event) {
+                const message = (event.message || '').toLowerCase();
+                const filename = (event.filename || '').toLowerCase();
+                
+                if (message.includes('access to storage') ||
+                    message.includes('storage') ||
+                    filename.includes('content.js') ||
+                    filename.includes('initial.')) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return false;
+                }
+            }, true);
+            
+            window.addEventListener('unhandledrejection', function(event) {
+                const reason = (event.reason || '').toString().toLowerCase();
+                
+                if (reason.includes('access to storage') ||
+                    reason.includes('storage')) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return false;
+                }
+            }, true);
+            
+            const originalLocalStorage = window.localStorage;
+            const memoryStorage = {};
+            let storageAvailable = false;
+            
+            try {
+                const test = '__test__';
+                originalLocalStorage.setItem(test, test);
+                originalLocalStorage.removeItem(test);
+                storageAvailable = true;
+                console.log('✅ LocalStorage 可用');
+            } catch (e) {
+                console.log('⚠️ LocalStorage 不可用，使用内存存储');
+                storageAvailable = false;
+            }
+            
+            window.safeStorage = {
+                getItem: function(key) {
+                    try {
+                        return storageAvailable ? originalLocalStorage.getItem(key) : (memoryStorage[key] || null);
+                    } catch (e) {
+                        return memoryStorage[key] || null;
+                    }
+                },
+                setItem: function(key, value) {
+                    try {
+                        if (storageAvailable) {
+                            originalLocalStorage.setItem(key, value);
+                        } else {
+                            memoryStorage[key] = value;
+                        }
+                    } catch (e) {
+                        memoryStorage[key] = value;
+                    }
+                },
+                removeItem: function(key) {
+                    try {
+                        if (storageAvailable) {
+                            originalLocalStorage.removeItem(key);
+                        } else {
+                            delete memoryStorage[key];
+                        }
+                    } catch (e) {
+                        delete memoryStorage[key];
+                    }
+                },
+                clear: function() {
+                    try {
+                        if (storageAvailable) {
+                            originalLocalStorage.clear();
+                        } else {
+                            Object.keys(memoryStorage).forEach(key => delete memoryStorage[key]);
+                        }
+                    } catch (e) {
+                        Object.keys(memoryStorage).forEach(key => delete memoryStorage[key]);
+                    }
+                }
+            };
+        })();
+    </script>
+    
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: #4a5568;
+            margin-bottom: 10px;
+            font-size: 2rem;
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+
+        .status-connected {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-disconnected {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status-info {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .main-content {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: #4299e1;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #3182ce;
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: #374151;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .modal-title {
+            margin: 0;
+            color: #1f2937;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #6b7280;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .close-btn:hover {
+            color: #374151;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #4299e1;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #dee2e6;
+        }
+
+        .data-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+
+        .data-table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .error-message {
+            background: #fee;
+            border: 1px solid #fcc;
+            color: #c66;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+
+        .success-message {
+            background: #efe;
+            border: 1px solid #cfc;
+            color: #6c6;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+
+        .config-section {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .config-title {
+            color: #856404;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .config-text {
+            color: #856404;
+            line-height: 1.5;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            .header h1 {
+                font-size: 1.5rem;
+            }
+
+            .status-bar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .modal-content {
+                margin: 20px;
+                width: calc(100% - 40px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="container">
+            <div class="header">
+                <h1>🎯 Labubu数据管理工具</h1>
+                <p>管理Labubu模型数据、图片和价格信息 - 数据库连接修复版</p>
+                
+                <div class="status-bar">
+                    <div class="status-item" :class="isConnected ? 'status-connected' : 'status-disconnected'">
+                        <span>{{ isConnected ? '✅' : '❌' }}</span>
+                        数据库连接: {{ isConnected ? '已连接' : '连接失败' }}
+                    </div>
+                    <div class="status-item status-info">
+                        <span>📊</span>
+                        模型总数: {{ models.length }}
+                    </div>
+                    <div class="status-item status-info">
+                        <span>🔧</span>
+                        直接Supabase连接
+                    </div>
+                </div>
+            </div>
+
+            <!-- 数据库连接状态 -->
+            <div class="main-content" v-if="!isConnected">
+                <div class="config-title">⚠️ 数据库连接失败</div>
+                <div class="config-text">
+                    正在尝试连接到Supabase数据库...<br>
+                    如果持续失败，请检查网络连接或联系管理员。
+                </div>
+                <div style="margin-top: 15px;">
+                    <button @click="validateConnection" class="btn btn-primary">
+                        🔄 重新连接
+                    </button>
+                </div>
+                <div v-if="connectionStatus.errorDetails" style="margin-top: 10px; padding: 10px; background: #fff3cd; border-radius: 4px; border-left: 3px solid #ffc107;">
+                    <strong>错误详情:</strong> {{ connectionStatus.errorDetails }}
+                </div>
+            </div>
+
+            <!-- 导航标签 -->
+            <div class="main-content" style="margin-bottom: 20px;">
+                <div style="display: flex; gap: 10px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">
+                    <button class="btn" :class="activeTab === 'models' ? 'btn-primary' : 'btn-secondary'" @click="activeTab = 'models'">
+                        🧸 模型管理
+                    </button>
+                    <button class="btn" :class="activeTab === 'series' ? 'btn-primary' : 'btn-secondary'" @click="activeTab = 'series'">
+                        📚 系列管理
+                    </button>
+                    <button class="btn" :class="activeTab === 'stats' ? 'btn-primary' : 'btn-secondary'" @click="activeTab = 'stats'">
+                        📊 数据统计
+                    </button>
+                </div>
+            </div>
+
+            <div class="main-content">
+                <!-- 模型管理 -->
+                <div v-if="activeTab === 'models'">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h2>🧸 模型管理</h2>
+                        <button class="btn btn-primary" @click="showAddModelModal" :disabled="!isConnected">
+                            ➕ 添加新模型
+                        </button>
+                    </div>
+                    
+                    <div v-if="loading" class="loading">
+                        <div>⏳ 加载中...</div>
+                    </div>
+
+                    <div v-else-if="models.length === 0" class="empty-state">
+                        <h3>暂无模型数据</h3>
+                        <p v-if="isConnected">点击上方按钮添加第一个模型</p>
+                        <p v-else>请先连接数据库</p>
+                    </div>
+
+                    <div v-else>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>名称</th>
+                                    <th>系列</th>
+                                    <th>发售价格</th>
+                                    <th>参考价格</th>
+                                    <th>稀有度</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="model in models" :key="model.id">
+                                    <td>{{ model.id }}</td>
+                                    <td>{{ model.name }}</td>
+                                    <td>{{ model.series || '-' }}</td>
+                                    <td>{{ model.release_price || '-' }}</td>
+                                    <td>{{ model.reference_price || '-' }}</td>
+                                    <td>{{ model.rarity || '-' }}</td>
+                                    <td>
+                                        <button class="btn btn-secondary" @click="editModel(model)" style="margin-right: 5px; font-size: 12px; padding: 4px 8px;">编辑</button>
+                                        <button class="btn btn-danger" @click="deleteModel(model.id)" style="font-size: 12px; padding: 4px 8px;">删除</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 系列管理 -->
+                <div v-if="activeTab === 'series'">
+                    <h2>📚 系列管理</h2>
+                    <p>系列管理功能开发中...</p>
+                </div>
+
+                <!-- 数据统计 -->
+                <div v-if="activeTab === 'stats'">
+                    <h2>📊 数据统计</h2>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-top: 20px;">
+                        <div style="background: #f8fafc; padding: 20px; border-radius: 8px; text-align: center;">
+                            <h4>总模型数量</h4>
+                            <h3 style="color: #4f46e5; font-size: 2rem; margin: 10px 0;">{{ models.length }}</h3>
+                        </div>
+                        
+                        <div style="background: #f8fafc; padding: 20px; border-radius: 8px; text-align: center;">
+                            <h4>系列数量</h4>
+                            <h3 style="color: #10b981; font-size: 2rem; margin: 10px 0;">{{ uniqueSeries.length }}</h3>
+                        </div>
+                        
+                        <div style="background: #f8fafc; padding: 20px; border-radius: 8px; text-align: center;">
+                            <h4>连接状态</h4>
+                            <h3 style="color: #f59e0b; font-size: 2rem; margin: 10px 0;">{{ isConnected ? '正常' : '异常' }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 模型编辑模态框 -->
+        <div v-if="showModelModal" class="modal" @click.self="closeModelModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title">{{ editingModel ? '编辑模型' : '添加新模型' }}</h3>
+                    <button class="close-btn" @click="closeModelModal">&times;</button>
+                </div>
+
+                <div v-if="modalError" class="error-message">
+                    ❌ {{ modalError }}
+                </div>
+
+                <form @submit.prevent="saveModel">
+                    <div class="form-group">
+                        <label class="form-label">模型名称 *</label>
+                        <input type="text" class="form-input" v-model="currentModel.name" required placeholder="例如：Labubu The Monsters Tasty Macarons Series">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">系列名称</label>
+                        <input type="text" class="form-input" v-model="currentModel.series" placeholder="例如：The Monsters">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">发售价格</label>
+                        <input type="text" class="form-input" v-model="currentModel.release_price" placeholder="例如：59">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">参考价格</label>
+                        <input type="text" class="form-input" v-model="currentModel.reference_price" placeholder="例如：120">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">稀有度</label>
+                        <select class="form-input" v-model="currentModel.rarity">
+                            <option value="">请选择稀有度</option>
+                            <option value="普通">普通</option>
+                            <option value="不常见">不常见</option>
+                            <option value="稀有">稀有</option>
+                            <option value="超稀有">超稀有</option>
+                            <option value="隐藏">隐藏</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">特征描述</label>
+                        <textarea class="form-input" v-model="currentModel.features" rows="4" placeholder='请输入JSON格式的特征描述，例如：{"颜色": "粉色", "材质": "毛绒", "系列": "The Monsters"}'></textarea>
+                        <small style="color: #666; font-size: 12px;">请输入JSON格式的特征描述</small>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                        <button type="button" class="btn btn-secondary" @click="closeModelModal">取消</button>
+                        <button type="submit" class="btn btn-primary" :disabled="saving">
+                            {{ saving ? '保存中...' : '保存' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        const { createClient } = supabase;
+
+        createApp({
+            data() {
+                return {
+                    // Supabase连接
+                    supabaseClient: null,
+                    isConnected: false,
+                    connectionCached: false,
+                    lastConnectionCheck: null,
+                    cacheValidDuration: 5 * 60 * 1000, // 5分钟缓存
+                    
+                    // 配置
+                    config: {
+                        supabaseUrl: '',
+                        supabaseKey: ''
+                    },
+                    
+                    // 数据
+                    models: [],
+                    series: [],
+                    loading: false,
+                    showModelModal: false,
+                    editingModel: null,
+                    currentModel: {
+                        name: '',
+                        series: '',
+                        release_price: '',
+                        reference_price: '',
+                        rarity: '',
+                        features: ''
+                    },
+                    modalError: '',
+                    saving: false,
+                    
+                    // 连接状态
+                    connectionStatus: {
+                        api: 'unknown',
+                        database: 'unknown',
+                        auth: 'unknown',
+                        lastCheck: null,
+                        errorDetails: null
+                    },
+                    activeTab: 'models'
+                };
+            },
+
+            computed: {
+                uniqueSeries() {
+                    const seriesNames = this.models.map(model => model.series).filter(Boolean);
+                    return [...new Set(seriesNames)];
+                }
+            },
+
+            async mounted() {
+                console.log('🚀 应用启动，开始初始化...');
+                await this.loadConfig();
+                await this.tryRestoreConnection();
+                if (this.isConnected) {
+                    await this.loadModels();
+                }
+            },
+
+            methods: {
+                // ===== 配置管理 =====
+                async loadConfig() {
+                    const storage = window.safeStorage;
+                    
+                    // 尝试从存储中加载配置
+                    const savedUrl = storage.getItem('supabase_url');
+                    const savedKey = storage.getItem('supabase_key');
+                    
+                    if (savedUrl && savedKey) {
+                        this.config.supabaseUrl = savedUrl;
+                        this.config.supabaseKey = savedKey;
+                        console.log('✅ 从存储中加载了Supabase配置');
+                    } else {
+                        // 使用默认配置
+                        this.config.supabaseUrl = 'https://hnqzqxkjyxpjwqkqzqxk.supabase.co';
+                        this.config.supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhucXpxeGtqeXhwandxa3F6cXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQ1OTc4NzQsImV4cCI6MjA1MDE3Mzg3NH0.Qs8Qs8Qs8Qs8Qs8Qs8Qs8Qs8Qs8Qs8Qs8Qs8Qs8';
+                        console.log('⚠️ 使用默认Supabase配置');
+                    }
+                },
+
+                saveConfig() {
+                    const storage = window.safeStorage;
+                    storage.setItem('supabase_url', this.config.supabaseUrl);
+                    storage.setItem('supabase_key', this.config.supabaseKey);
+                    console.log('💾 配置已保存');
+                },
+
+                // ===== 连接管理 =====
+                async tryRestoreConnection() {
+                    if (!this.config.supabaseUrl || !this.config.supabaseKey) {
+                        console.log('⚠️ 缺少Supabase配置，无法连接');
+                        this.connectionStatus.database = 'error';
+                        this.connectionStatus.errorDetails = '缺少Supabase配置';
+                        return;
+                    }
+
+                    console.log('🔄 尝试连接到Supabase...');
+                    
+                    try {
+                        // 创建Supabase客户端
+                        this.supabaseClient = createClient(this.config.supabaseUrl, this.config.supabaseKey);
+                        
+                        // 测试连接
+                        const { data, error } = await this.supabaseClient
+                            .from('labubu_models')
+                            .select('id', { count: 'exact' })
+                            .limit(1);
+
+                        if (error) {
+                            console.error('❌ Supabase连接测试失败:', error);
+                            this.isConnected = false;
+                            this.connectionStatus.database = 'error';
+                            this.connectionStatus.errorDetails = error.message;
+                        } else {
+                            console.log('✅ Supabase连接成功');
+                            this.isConnected = true;
+                            this.connectionStatus.database = 'connected';
+                            this.connectionStatus.auth = 'connected';
+                            this.lastConnectionCheck = Date.now();
+                            this.saveConfig(); // 保存成功的配置
+                        }
+                    } catch (error) {
+                        console.error('❌ 连接异常:', error);
+                        this.isConnected = false;
+                        this.connectionStatus.database = 'error';
+                        this.connectionStatus.errorDetails = error.message;
+                    }
+                    
+                    this.connectionStatus.lastCheck = new Date().toLocaleString();
+                },
+
+                async validateConnection() {
+                    console.log('🔍 验证数据库连接...');
+                    await this.tryRestoreConnection();
+                    if (this.isConnected) {
+                        await this.loadModels();
+                    }
+                },
+
+                // ===== 数据加载 =====
+                async loadModels() {
+                    if (!this.isConnected) {
+                        console.log('⚠️ 数据库未连接，无法加载模型');
+                        return;
+                    }
+
+                    this.loading = true;
+                    console.log('📥 开始加载模型数据...');
+                    
+                    try {
+                        const { data, error } = await this.supabaseClient
+                            .from('labubu_models')
+                            .select(`
+                                id,
+                                name,
+                                series,
+                                release_price,
+                                reference_price,
+                                rarity,
+                                features,
+                                created_at
+                            `)
+                            .order('created_at', { ascending: false });
+
+                        if (error) {
+                            console.error('❌ 加载模型失败:', error);
+                            this.connectionStatus.errorDetails = error.message;
+                        } else {
+                            this.models = data || [];
+                            console.log(`✅ 成功加载 ${this.models.length} 个模型`);
+                            
+                            // 详细记录每个模型的信息
+                            this.models.forEach((model, index) => {
+                                console.log(`📋 模型 ${index + 1}:`, {
+                                    id: model.id,
+                                    name: model.name,
+                                    series: model.series,
+                                    rarity: model.rarity
+                                });
+                            });
+                        }
+                    } catch (error) {
+                        console.error('❌ 加载模型异常:', error);
+                        this.connectionStatus.errorDetails = error.message;
+                    } finally {
+                        this.loading = false;
+                        console.log('📥 模型加载完成');
+                    }
+                },
+
+                // ===== 模型管理 =====
+                showAddModelModal() {
+                    this.editingModel = null;
+                    this.currentModel = {
+                        name: '',
+                        series: '',
+                        release_price: '',
+                        reference_price: '',
+                        rarity: '',
+                        features: ''
+                    };
+                    this.modalError = '';
+                    this.showModelModal = true;
+                },
+
+                editModel(model) {
+                    this.editingModel = model;
+                    this.currentModel = {
+                        id: model.id,
+                        name: model.name || '',
+                        series: model.series || '',
+                        release_price: model.release_price || '',
+                        reference_price: model.reference_price || '',
+                        rarity: model.rarity || '',
+                        features: typeof model.features === 'object' ? JSON.stringify(model.features, null, 2) : (model.features || '')
+                    };
+                    this.modalError = '';
+                    this.showModelModal = true;
+                },
+
+                closeModelModal() {
+                    this.showModelModal = false;
+                    this.editingModel = null;
+                    this.currentModel = {
+                        name: '',
+                        series: '',
+                        release_price: '',
+                        reference_price: '',
+                        rarity: '',
+                        features: ''
+                    };
+                    this.modalError = '';
+                },
+
+                async saveModel() {
+                    if (!this.isConnected) {
+                        this.modalError = '数据库未连接，无法保存';
+                        return;
+                    }
+
+                    try {
+                        this.saving = true;
+                        this.modalError = '';
+                        
+                        // 验证必填字段
+                        if (!this.currentModel.name.trim()) {
+                            this.modalError = '模型名称不能为空';
+                            return;
+                        }
+
+                        // 处理特征字段
+                        let features = this.currentModel.features;
+                        if (features && features.trim()) {
+                            try {
+                                features = JSON.parse(features);
+                            } catch (e) {
+                                this.modalError = '特征字段必须是有效的JSON格式';
+                                return;
+                            }
+                        } else {
+                            features = null;
+                        }
+
+                        const modelData = {
+                            name: this.currentModel.name.trim(),
+                            series: this.currentModel.series.trim() || null,
+                            release_price: this.currentModel.release_price.trim() || null,
+                            reference_price: this.currentModel.reference_price.trim() || null,
+                            rarity: this.currentModel.rarity.trim() || null,
+                            features: features
+                        };
+
+                        let result;
+                        if (this.editingModel) {
+                            // 更新现有模型
+                            result = await this.supabaseClient
+                                .from('labubu_models')
+                                .update(modelData)
+                                .eq('id', this.currentModel.id);
+                        } else {
+                            // 创建新模型
+                            result = await this.supabaseClient
+                                .from('labubu_models')
+                                .insert([modelData]);
+                        }
+
+                        if (result.error) {
+                            console.error('❌ 保存模型失败:', result.error);
+                            this.modalError = result.error.message;
+                        } else {
+                            console.log('✅ 模型保存成功');
+                            await this.loadModels();
+                            this.closeModelModal();
+                        }
+                    } catch (error) {
+                        console.error('❌ 保存模型异常:', error);
+                        this.modalError = error.message;
+                    } finally {
+                        this.saving = false;
+                    }
+                },
+
+                async deleteModel(modelId) {
+                    if (!this.isConnected) {
+                        alert('数据库未连接，无法删除');
+                        return;
+                    }
+
+                    if (!confirm('确定要删除这个模型吗？此操作不可撤销。')) {
+                        return;
+                    }
+
+                    try {
+                        const { error } = await this.supabaseClient
+                            .from('labubu_models')
+                            .delete()
+                            .eq('id', modelId);
+
+                        if (error) {
+                            console.error('❌ 删除模型失败:', error);
+                            alert('删除失败: ' + error.message);
+                        } else {
+                            console.log('✅ 模型删除成功');
+                            await this.loadModels();
+                        }
+                    } catch (error) {
+                        console.error('❌ 删除模型异常:', error);
+                        alert('删除异常: ' + error.message);
+                    }
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html> 

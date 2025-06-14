@@ -1,0 +1,152 @@
+    <script>
+        // 🛡️ 超强存储错误抑制系统
+        (function() {
+            // 1. 重写console.error来过滤存储错误
+            const originalConsoleError = console.error;
+            console.error = function(...args) {
+                const message = args.join(' ');
+                if (message.includes('Access to storage is not allowed') || 
+                    message.includes('storage is not allowed')) {
+                    return; // 完全忽略存储错误
+                }
+                originalConsoleError.apply(console, args);
+            };
+
+            // 2. 重写console.warn来过滤存储警告
+            const originalConsoleWarn = console.warn;
+            console.warn = function(...args) {
+                const message = args.join(' ');
+                if (message.includes('Access to storage is not allowed') || 
+                    message.includes('storage is not allowed')) {
+                    return; // 完全忽略存储警告
+                }
+                originalConsoleWarn.apply(console, args);
+            };
+
+            // 3. 全局错误捕获
+            window.addEventListener('error', function(event) {
+                if (event.message && event.message.includes('Access to storage is not allowed')) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return false;
+                }
+            }, true);
+
+            // 4. Promise错误捕获
+            window.addEventListener('unhandledrejection', function(event) {
+                if (event.reason && event.reason.message && 
+                    event.reason.message.includes('Access to storage is not allowed')) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return false;
+                }
+            }, true);
+
+            // 5. 重写localStorage来避免错误
+            const originalLocalStorage = window.localStorage;
+            const memoryStorage = {};
+            let storageAvailable = false;
+
+            // 测试localStorage可用性
+            try {
+                const test = '__storage_test__';
+                originalLocalStorage.setItem(test, test);
+                originalLocalStorage.removeItem(test);
+                storageAvailable = true;
+                console.log('✅ LocalStorage 可用 (登录页)');
+            } catch (e) {
+                console.log('⚠️ LocalStorage 不可用，使用内存存储 (登录页)');
+                storageAvailable = false;
+            }
+
+            // 创建安全的存储接口
+            window.safeStorage = {
+                getItem: function(key) {
+                    try {
+                        if (storageAvailable) {
+                            return originalLocalStorage.getItem(key);
+                        } else {
+                            return memoryStorage[key] || null;
+                        }
+                    } catch (e) {
+                        return memoryStorage[key] || null;
+                    }
+                },
+                setItem: function(key, value) {
+                    try {
+                        if (storageAvailable) {
+                            originalLocalStorage.setItem(key, value);
+                        } else {
+                            memoryStorage[key] = value;
+                        }
+                    } catch (e) {
+                        memoryStorage[key] = value;
+                    }
+                },
+                removeItem: function(key) {
+                    try {
+                        if (storageAvailable) {
+                            originalLocalStorage.removeItem(key);
+                        } else {
+                            delete memoryStorage[key];
+                        }
+                    } catch (e) {
+                        delete memoryStorage[key];
+                    }
+                },
+                clear: function() {
+                    try {
+                        if (storageAvailable) {
+                            originalLocalStorage.clear();
+                        } else {
+                            Object.keys(memoryStorage).forEach(key => delete memoryStorage[key]);
+                        }
+                    } catch (e) {
+                        Object.keys(memoryStorage).forEach(key => delete memoryStorage[key]);
+                    }
+                }
+            };
+
+            // 6. 重写原生localStorage以防止第三方脚本错误
+            try {
+                Object.defineProperty(window, 'localStorage', {
+                    get: function() {
+                        return {
+                            getItem: window.safeStorage.getItem,
+                            setItem: window.safeStorage.setItem,
+                            removeItem: window.safeStorage.removeItem,
+                            clear: window.safeStorage.clear,
+                            get length() {
+                                try {
+                                    if (storageAvailable) {
+                                        return originalLocalStorage.length;
+                                    } else {
+                                        return Object.keys(memoryStorage).length;
+                                    }
+                                } catch (e) {
+                                    return Object.keys(memoryStorage).length;
+                                }
+                            },
+                            key: function(index) {
+                                try {
+                                    if (storageAvailable) {
+                                        return originalLocalStorage.key(index);
+                                    } else {
+                                        const keys = Object.keys(memoryStorage);
+                                        return keys[index] || null;
+                                    }
+                                } catch (e) {
+                                    const keys = Object.keys(memoryStorage);
+                                    return keys[index] || null;
+                                }
+                            }
+                        };
+                    },
+                    configurable: true
+                });
+            } catch (e) {
+                // 如果无法重写localStorage，至少确保safeStorage可用
+                console.log('无法重写localStorage，但safeStorage已就绪 (登录页)');
+            }
+        })();
+    </script> 

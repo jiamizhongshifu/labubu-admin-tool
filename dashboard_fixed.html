@@ -5,127 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Labubu数据管理工具</title>
     <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
-    <script>
-        // 全局存储访问保护和错误处理
-        (function() {
-            'use strict';
-            
-            // 捕获所有未处理的错误
-            window.addEventListener('error', function(e) {
-                if (e.message && e.message.includes('storage')) {
-                    console.warn('Storage error caught:', e.message);
-                    e.preventDefault();
-                }
-            });
-            
-            window.addEventListener('unhandledrejection', function(e) {
-                if (e.reason && e.reason.message && e.reason.message.includes('storage')) {
-                    console.warn('Storage promise rejection caught:', e.reason.message);
-                    e.preventDefault();
-                }
-            });
-            
-            // 创建安全的存储访问器
-            window.SafeStorage = {
-                _memoryStorage: new Map(),
-                _storageAvailable: null,
-                
-                isStorageAvailable() {
-                    if (this._storageAvailable !== null) {
-                        return this._storageAvailable;
-                    }
-                    
-                    try {
-                        // 检查基本条件
-                        if (typeof window === 'undefined' || !window.localStorage) {
-                            this._storageAvailable = false;
-                            return false;
-                        }
-                        
-                        // 检查是否在安全上下文中
-                        if (location.protocol === 'file:' || 
-                            (location.protocol === 'http:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1')) {
-                            console.warn('Storage may not be available in this context');
-                        }
-                        
-                        // 测试存储访问
-                        const testKey = '__storage_test_' + Date.now();
-                        window.localStorage.setItem(testKey, 'test');
-                        const testValue = window.localStorage.getItem(testKey);
-                        window.localStorage.removeItem(testKey);
-                        
-                        this._storageAvailable = (testValue === 'test');
-                        return this._storageAvailable;
-                    } catch (e) {
-                        console.warn('Storage availability test failed:', e.message);
-                        this._storageAvailable = false;
-                        return false;
-                    }
-                },
-                
-                getItem(key) {
-                    try {
-                        if (this.isStorageAvailable()) {
-                            return window.localStorage.getItem(key);
-                        } else {
-                            return this._memoryStorage.get(key) || null;
-                        }
-                    } catch (e) {
-                        console.warn('Storage getItem failed, using memory storage:', e.message);
-                        return this._memoryStorage.get(key) || null;
-                    }
-                },
-                
-                setItem(key, value) {
-                    try {
-                        if (this.isStorageAvailable()) {
-                            window.localStorage.setItem(key, value);
-                        } else {
-                            this._memoryStorage.set(key, String(value));
-                        }
-                    } catch (e) {
-                        console.warn('Storage setItem failed, using memory storage:', e.message);
-                        this._memoryStorage.set(key, String(value));
-                    }
-                },
-                
-                removeItem(key) {
-                    try {
-                        if (this.isStorageAvailable()) {
-                            window.localStorage.removeItem(key);
-                        } else {
-                            this._memoryStorage.delete(key);
-                        }
-                    } catch (e) {
-                        console.warn('Storage removeItem failed, using memory storage:', e.message);
-                        this._memoryStorage.delete(key);
-                    }
-                },
-                
-                clear() {
-                    try {
-                        if (this.isStorageAvailable()) {
-                            window.localStorage.clear();
-                        } else {
-                            this._memoryStorage.clear();
-                        }
-                    } catch (e) {
-                        console.warn('Storage clear failed, using memory storage:', e.message);
-                        this._memoryStorage.clear();
-                    }
-                }
-            };
-            
-            // 禁用Vue开发模式警告
-            if (window.Vue && window.Vue.config) {
-                window.Vue.config.devtools = false;
-                window.Vue.config.productionTip = false;
-            }
-            
-            // 添加调试信息
-            console.log('SafeStorage initialized. Storage available:', window.SafeStorage.isStorageAvailable());
-        })();
-    </script>
     <style>
         * {
             margin: 0;
@@ -679,6 +558,95 @@
     </div>
 
     <script>
+        // 存储修复工具
+        class StorageFix {
+            constructor() {
+                this.memoryStorage = {};
+                this.isStorageAvailable = this.checkStorageAvailability();
+                this.initializeStorageFix();
+            }
+
+            checkStorageAvailability() {
+                try {
+                    const test = '__storage_test__';
+                    localStorage.setItem(test, test);
+                    localStorage.removeItem(test);
+                    console.log('✅ LocalStorage 可用');
+                    return true;
+                } catch (e) {
+                    console.warn('⚠️ LocalStorage 不可用，启用内存存储备用方案:', e.message);
+                    return false;
+                }
+            }
+
+            initializeStorageFix() {
+                if (!this.isStorageAvailable) {
+                    this.createStoragePolyfill();
+                }
+            }
+
+            createStoragePolyfill() {
+                const self = this;
+                window.localStorage = {
+                    getItem: function(key) {
+                        return self.memoryStorage[key] || null;
+                    },
+                    setItem: function(key, value) {
+                        self.memoryStorage[key] = String(value);
+                    },
+                    removeItem: function(key) {
+                        delete self.memoryStorage[key];
+                    },
+                    clear: function() {
+                        self.memoryStorage = {};
+                    },
+                    get length() {
+                        return Object.keys(self.memoryStorage).length;
+                    },
+                    key: function(index) {
+                        const keys = Object.keys(self.memoryStorage);
+                        return keys[index] || null;
+                    }
+                };
+                console.log('🔧 已启用localStorage兼容层');
+            }
+
+            safeGetItem(key) {
+                try {
+                    if (this.isStorageAvailable) {
+                        return localStorage.getItem(key);
+                    } else {
+                        return this.memoryStorage[key] || null;
+                    }
+                } catch (e) {
+                    console.warn(`获取存储项失败 ${key}:`, e.message);
+                    return this.memoryStorage[key] || null;
+                }
+            }
+
+            safeSetItem(key, value) {
+                try {
+                    if (this.isStorageAvailable) {
+                        localStorage.setItem(key, value);
+                    } else {
+                        this.memoryStorage[key] = value;
+                    }
+                    return true;
+                } catch (e) {
+                    console.warn(`设置存储项失败 ${key}:`, e.message);
+                    this.memoryStorage[key] = value;
+                    return false;
+                }
+            }
+        }
+
+        // 初始化存储修复
+        const storageFix = new StorageFix();
+        window.safeStorage = {
+            getItem: (key) => storageFix.safeGetItem(key),
+            setItem: (key, value) => storageFix.safeSetItem(key, value)
+        };
+
         const { createApp } = Vue;
 
         createApp({
@@ -734,9 +702,44 @@
                 await this.loadSeries();
             },
             methods: {
-                // 使用全局安全存储访问器
+                // 完全安全的localStorage访问
                 safeLocalStorage() {
-                    return window.SafeStorage;
+                    try {
+                        // 检查是否在安全上下文中
+                        if (typeof window === 'undefined') {
+                            return this.createMemoryStorage();
+                        }
+                        
+                        // 检查localStorage是否存在
+                        if (!window.localStorage) {
+                            return this.createMemoryStorage();
+                        }
+                        
+                        // 测试localStorage是否可以使用
+                        const testKey = '__test_storage__';
+                        window.localStorage.setItem(testKey, 'test');
+                        window.localStorage.removeItem(testKey);
+                        
+                        return window.localStorage;
+                    } catch (e) {
+                        console.warn('localStorage not available, using memory storage:', e.message);
+                        return this.createMemoryStorage();
+                    }
+                },
+
+                // 创建内存存储
+                createMemoryStorage() {
+                    if (!this._memoryStorage) {
+                        this._memoryStorage = new Map();
+                    }
+                    return {
+                        getItem: (key) => this._memoryStorage.get(key) || null,
+                        setItem: (key, value) => this._memoryStorage.set(key, String(value)),
+                        removeItem: (key) => this._memoryStorage.delete(key),
+                        clear: () => this._memoryStorage.clear(),
+                        get length() { return this._memoryStorage.size; },
+                        key: (index) => Array.from(this._memoryStorage.keys())[index] || null
+                    };
                 },
 
                 async checkAuth() {
