@@ -3,6 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- 🛡️ 超级早期存储错误抑制系统 v5.2 MEGA ULTIMATE -->
+    <script>
+        // 立即执行，在任何其他脚本之前
+        (function() {
+            'use strict';
+            
+            // 超级早期拦截 - 在页面加载前就开始工作
+            const STORAGE_ERROR_PATTERNS = [
+                'access to storage',
+                'storage is not allowed',
+                'localstorage',
+                'sessionstorage',
+                'content.js',
+                'initial.',
+                'feedback.html',
+                'chrome-extension',
+                'extension'
+            ];
+            
+            function isStorageError(message) {
+                const msg = (message || '').toString().toLowerCase();
+                return STORAGE_ERROR_PATTERNS.some(pattern => msg.includes(pattern));
+            }
+            
+            // 1. 立即重写控制台方法
+            const originalError = console.error;
+            const originalWarn = console.warn;
+            
+            console.error = function(...args) {
+                if (isStorageError(args.join(' '))) return;
+                originalError.apply(console, args);
+            };
+            
+            console.warn = function(...args) {
+                if (isStorageError(args.join(' '))) return;
+                originalWarn.apply(console, args);
+            };
+            
+            // 2. 立即设置全局错误处理
+            window.addEventListener('error', function(e) {
+                if (isStorageError(e.message) || isStorageError(e.filename)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                }
+            }, true); // 使用捕获阶段
+            
+            // 3. 立即设置Promise错误处理
+            window.addEventListener('unhandledrejection', function(e) {
+                if (isStorageError(e.reason)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                }
+            }, true);
+            
+            // 4. 立即创建安全的存储对象
+            const safeStorage = {
+                getItem: () => null,
+                setItem: () => {},
+                removeItem: () => {},
+                clear: () => {},
+                length: 0,
+                key: () => null
+            };
+            
+            // 5. 立即重定义存储API
+            try {
+                Object.defineProperty(window, 'localStorage', {
+                    get: () => safeStorage,
+                    configurable: false
+                });
+            } catch(e) {}
+            
+            try {
+                Object.defineProperty(window, 'sessionStorage', {
+                    get: () => safeStorage,
+                    configurable: false
+                });
+            } catch(e) {}
+            
+            console.log('🛡️ 超级早期存储错误抑制系统 v5.2 MEGA ULTIMATE 已激活');
+        })();
+    </script>
+    
     <title>Labubu 数据管理系统 v5.2 图片管理版</title>
     <!-- 版本标识 v5.2 图片管理版本 - 2024-12-19 -->
     <!-- 新增功能: 图片上传、存储、展示 -->
@@ -11,141 +97,6 @@
     
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    
-    <!-- 🛡️ 终极存储错误抑制系统 v5.2 ULTIMATE -->
-    <script>
-        (function() {
-            'use strict';
-            
-            console.log('🛡️ 启动终极存储错误抑制系统 v5.2 ULTIMATE');
-            
-            // 1. 完全重写 console.error
-            const originalConsoleError = console.error;
-            const originalConsoleWarn = console.warn;
-            const originalConsoleLog = console.log;
-            
-            console.error = function(...args) {
-                const message = args.join(' ').toLowerCase();
-                if (message.includes('access to storage') || 
-                    message.includes('storage is not allowed') ||
-                    message.includes('localstorage') ||
-                    message.includes('sessionstorage') ||
-                    message.includes('content.js') ||
-                    message.includes('initial.') ||
-                    message.includes('feedback.html') ||
-                    message.includes('chrome-extension') ||
-                    message.includes('extension')) {
-                    return; // 完全静默
-                }
-                originalConsoleError.apply(console, args);
-            };
-            
-            console.warn = function(...args) {
-                const message = args.join(' ').toLowerCase();
-                if (message.includes('storage') || message.includes('extension')) {
-                    return;
-                }
-                originalConsoleWarn.apply(console, args);
-            };
-            
-            // 2. Promise 错误拦截 - 增强版
-            window.addEventListener('unhandledrejection', function(event) {
-                const reason = (event.reason || '').toString().toLowerCase();
-                if (reason.includes('access to storage') || 
-                    reason.includes('storage') ||
-                    reason.includes('extension') ||
-                    reason.includes('content.js') ||
-                    reason.includes('initial.')) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    return false;
-                }
-            });
-            
-            // 3. 全局错误拦截
-            window.addEventListener('error', function(event) {
-                const message = (event.message || '').toLowerCase();
-                const filename = (event.filename || '').toLowerCase();
-                if (message.includes('storage') || 
-                    filename.includes('content.js') ||
-                    filename.includes('initial.') ||
-                    filename.includes('extension')) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    return false;
-                }
-            });
-            
-            // 4. 阻止所有存储访问尝试
-            try {
-                Object.defineProperty(window, 'localStorage', {
-                    get: function() {
-                        return {
-                            getItem: () => null,
-                            setItem: () => {},
-                            removeItem: () => {},
-                            clear: () => {},
-                            length: 0,
-                            key: () => null
-                        };
-                    },
-                    configurable: false
-                });
-            } catch(e) {
-                // 静默处理
-            }
-            
-            try {
-                Object.defineProperty(window, 'sessionStorage', {
-                    get: function() {
-                        return {
-                            getItem: () => null,
-                            setItem: () => {},
-                            removeItem: () => {},
-                            clear: () => {},
-                            length: 0,
-                            key: () => null
-                        };
-                    },
-                    configurable: false
-                });
-            } catch(e) {
-                // 静默处理
-            }
-            
-            // 5. 拦截所有可能的存储API调用
-            const storageAPIs = ['localStorage', 'sessionStorage', 'indexedDB', 'webkitStorageInfo'];
-            storageAPIs.forEach(api => {
-                try {
-                    if (window[api]) {
-                        const original = window[api];
-                        window[api] = new Proxy(original, {
-                            get: function(target, prop) {
-                                try {
-                                    return target[prop];
-                                } catch(e) {
-                                    return function() { return null; };
-                                }
-                            },
-                            set: function(target, prop, value) {
-                                try {
-                                    target[prop] = value;
-                                    return true;
-                                } catch(e) {
-                                    return true;
-                                }
-                            }
-                        });
-                    }
-                } catch(e) {
-                    // 静默处理
-                }
-            });
-            
-            console.log('🛡️ 终极存储错误抑制系统 v5.2 ULTIMATE 已激活');
-            console.log('📊 版本信息: v5.2 图片管理版本 - 2024-12-19');
-        })();
-    </script>
     
     <style>
         * {
