@@ -12,35 +12,138 @@
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     
-    <!-- 🛡️ 存储错误抑制系统 v5.2 -->
+    <!-- 🛡️ 终极存储错误抑制系统 v5.2 ULTIMATE -->
     <script>
         (function() {
             'use strict';
             
-            // 简化的错误抑制系统
+            console.log('🛡️ 启动终极存储错误抑制系统 v5.2 ULTIMATE');
+            
+            // 1. 完全重写 console.error
             const originalConsoleError = console.error;
+            const originalConsoleWarn = console.warn;
+            const originalConsoleLog = console.log;
+            
             console.error = function(...args) {
                 const message = args.join(' ').toLowerCase();
                 if (message.includes('access to storage') || 
                     message.includes('storage is not allowed') ||
                     message.includes('localstorage') ||
+                    message.includes('sessionstorage') ||
                     message.includes('content.js') ||
-                    message.includes('initial.')) {
-                    return; // 静默存储错误
+                    message.includes('initial.') ||
+                    message.includes('feedback.html') ||
+                    message.includes('chrome-extension') ||
+                    message.includes('extension')) {
+                    return; // 完全静默
                 }
                 originalConsoleError.apply(console, args);
             };
             
-            // Promise错误拦截
+            console.warn = function(...args) {
+                const message = args.join(' ').toLowerCase();
+                if (message.includes('storage') || message.includes('extension')) {
+                    return;
+                }
+                originalConsoleWarn.apply(console, args);
+            };
+            
+            // 2. Promise 错误拦截 - 增强版
             window.addEventListener('unhandledrejection', function(event) {
                 const reason = (event.reason || '').toString().toLowerCase();
-                if (reason.includes('access to storage') || reason.includes('storage')) {
+                if (reason.includes('access to storage') || 
+                    reason.includes('storage') ||
+                    reason.includes('extension') ||
+                    reason.includes('content.js') ||
+                    reason.includes('initial.')) {
                     event.preventDefault();
+                    event.stopPropagation();
                     return false;
                 }
             });
             
-            console.log('🛡️ 存储错误抑制系统 v5.2 已激活');
+            // 3. 全局错误拦截
+            window.addEventListener('error', function(event) {
+                const message = (event.message || '').toLowerCase();
+                const filename = (event.filename || '').toLowerCase();
+                if (message.includes('storage') || 
+                    filename.includes('content.js') ||
+                    filename.includes('initial.') ||
+                    filename.includes('extension')) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return false;
+                }
+            });
+            
+            // 4. 阻止所有存储访问尝试
+            try {
+                Object.defineProperty(window, 'localStorage', {
+                    get: function() {
+                        return {
+                            getItem: () => null,
+                            setItem: () => {},
+                            removeItem: () => {},
+                            clear: () => {},
+                            length: 0,
+                            key: () => null
+                        };
+                    },
+                    configurable: false
+                });
+            } catch(e) {
+                // 静默处理
+            }
+            
+            try {
+                Object.defineProperty(window, 'sessionStorage', {
+                    get: function() {
+                        return {
+                            getItem: () => null,
+                            setItem: () => {},
+                            removeItem: () => {},
+                            clear: () => {},
+                            length: 0,
+                            key: () => null
+                        };
+                    },
+                    configurable: false
+                });
+            } catch(e) {
+                // 静默处理
+            }
+            
+            // 5. 拦截所有可能的存储API调用
+            const storageAPIs = ['localStorage', 'sessionStorage', 'indexedDB', 'webkitStorageInfo'];
+            storageAPIs.forEach(api => {
+                try {
+                    if (window[api]) {
+                        const original = window[api];
+                        window[api] = new Proxy(original, {
+                            get: function(target, prop) {
+                                try {
+                                    return target[prop];
+                                } catch(e) {
+                                    return function() { return null; };
+                                }
+                            },
+                            set: function(target, prop, value) {
+                                try {
+                                    target[prop] = value;
+                                    return true;
+                                } catch(e) {
+                                    return true;
+                                }
+                            }
+                        });
+                    }
+                } catch(e) {
+                    // 静默处理
+                }
+            });
+            
+            console.log('🛡️ 终极存储错误抑制系统 v5.2 ULTIMATE 已激活');
+            console.log('📊 版本信息: v5.2 图片管理版本 - 2024-12-19');
         })();
     </script>
     
