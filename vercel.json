@@ -18,7 +18,19 @@
     },
     {
       "src": "/dashboard",
-      "dest": "/dashboard.html"
+      "dest": "/dist/dashboard.html"
+    },
+    {
+      "src": "/",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/index.html",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/(.*\\.(css|js|png|jpg|jpeg|gif|ico|svg))",
+      "dest": "/dist/$1"
     },
     {
       "src": "/(.*)",
@@ -27,7 +39,7 @@
   ],
   "headers": [
     {
-      "source": "/dashboard.html",
+      "source": "/dist/dashboard.html",
       "headers": [
         {
           "key": "Cache-Control",
